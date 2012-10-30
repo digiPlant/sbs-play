@@ -137,7 +137,7 @@ public class GroovyTemplate extends BaseTemplate {
                     }
                 });
                 compilationUnit.compile();
-                // ouf 
+                // ouf
 
                 // Define script classes
                 StringBuilder sb = new StringBuilder();
@@ -348,7 +348,7 @@ public class GroovyTemplate extends BaseTemplate {
                 extension = template.name.substring(index + 1);
             }
         }
-        
+
         @Override
         public Object getProperty(String property) {
             try {
@@ -433,9 +433,10 @@ public class GroovyTemplate extends BaseTemplate {
 
         public String __getMessage(Object[] val) {
             if (val==null) {
-                throw new NullPointerException("You are trying to resolve a message with an expression " +
+                /*throw new NullPointerException("You are trying to resolve a message with an expression " +
                         "that is resolved to null - " +
-                        "have you forgotten quotes around the message-key?");
+                        "have you forgotten quotes around the message-key?");*/
+                return "";
             }
             if (val.length == 1) {
                 return Messages.get(val[0]);
