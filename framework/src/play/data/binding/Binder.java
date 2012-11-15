@@ -4,6 +4,7 @@ import org.apache.commons.lang.StringUtils;
 import org.joda.time.DateTime;
 import play.Logger;
 import play.Play;
+import play.i18n.Lang;
 import play.data.Upload;
 import play.data.binding.types.*;
 import play.data.validation.Validation;
@@ -17,6 +18,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.text.DecimalFormatSymbols;
 import java.math.BigDecimal;
 import java.util.*;
 
@@ -180,7 +182,7 @@ public abstract class Binder {
             }
 
             Object directBindResult = internalDirectBind(paramNode.getOriginalKey(), bindingAnnotations.annotations, paramNode.getFirstValue(clazz), clazz, type);
-            
+
             if (directBindResult != DIRECTBINDING_NO_RESULT) {
                 // we found a value/result when direct binding
                 return directBindResult;
@@ -190,7 +192,7 @@ public abstract class Binder {
             if (clazz.isArray()) {
                 return bindArray(clazz, paramNode, bindingAnnotations);
             }
-			
+
 			if (!paramNode.getAllChildren().isEmpty()) {
 	        	return internalBindBean(clazz, paramNode, bindingAnnotations);
 	        }
@@ -527,6 +529,20 @@ public abstract class Binder {
         }
     }
 
+    static String fixNumberInput( String value ){
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale(Lang.get()));
+        String numberGroupingChar = ""+symbols.getGroupingSeparator();
+        String decimalChar = ""+symbols.getDecimalSeparator();
+
+        if( value.contains(numberGroupingChar) ) value = value.replace(numberGroupingChar, "");
+        if( value.contains(decimalChar) ) value = value.replace(decimalChar, ".");
+
+        if( value.contains(" ") ) value = value.replace(" ", "");
+        if( value.contains(",") ) value = value.replace(",", ".");
+
+        return value;
+    }
+
     // If internalDirectBind was not able to bind it, it returns a special variable instance: DIRECTBIND_MISSING
     // Needs this because sometimes we need to know if no value was returned..
     private static Object internalDirectBind(String name, Annotation[] annotations, String value, Class<?> clazz, Type type) throws Exception {
@@ -592,7 +608,7 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0 : null;
             }
-
+            value = fixNumberInput( value );
             return Integer.parseInt(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
 
@@ -601,7 +617,7 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0l : null;
             }
-
+            value = fixNumberInput( value );
             return Long.parseLong(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
 
@@ -628,7 +644,7 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0f : null;
             }
-
+            value = fixNumberInput( value );
             return Float.parseFloat(value);
         }
 
@@ -637,7 +653,7 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0d : null;
             }
-
+            value = fixNumberInput( value );
             return Double.parseDouble(value);
         }
 
