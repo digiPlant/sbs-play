@@ -467,7 +467,7 @@ public class GroovyTemplate extends BaseTemplate {
             if (val instanceof RawData) {
                 return ((RawData) val).data;
             }
-            if (!template.name.endsWith(".html") || TagContext.hasParentTag("verbatim")) {
+            if (!template.name.endsWith(".html") || TagContext.hasParentTag("verbatim") || !Play.configuration.getProperty("future.escapeInTemplates", "false").equals("true")) {
                 return stringValue;
             }
             return HTML.htmlEscape(stringValue);
