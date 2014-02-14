@@ -285,7 +285,7 @@ def gitSBS(app, args, env, cmdloader=None):
             sys.exit(-1)
         print
 
-    print "run git checkout `git describe --tags` manually from repository/core"
+    print "~ Run git checkout `git describe --tags` manually from repository/core"
 
 def handle_sigterm(signum, frame):
     global process
