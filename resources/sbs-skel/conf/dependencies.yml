@@ -1,0 +1,13 @@
+# Application dependencies
+
+require:
+    - play
+    - play -> cobertura 2.5
+    - core -> core
+    
+repositories:
+    - dP modules:
+        type:       local
+        artifact:   ${application.path}/repository/[module]
+        contains:
+            - core

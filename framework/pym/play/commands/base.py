@@ -12,11 +12,12 @@ import signal
 
 from play.utils import *
 
-COMMANDS = ['run', 'new', 'clean', 'test', 'autotest', 'auto-test', 'id', 'new,run', 'clean,run', 'modules']
+COMMANDS = ['run', 'new', 'new-sbs', 'clean', 'test', 'autotest', 'auto-test', 'id', 'new,run', 'clean,run', 'modules']
 
 HELP = {
     'id': "Define the framework ID",
     'new': "Create a new application",
+    'new-sbs': "Create a new SBS Manager",
     'clean': "Delete temporary files (including the bytecode cache)",
     'run': "Run the application in the current shell",
     'test': "Run the application in test mode in the current shell",
@@ -35,6 +36,8 @@ def execute(**kargs):
         id(env)
     if command == 'new' or command == 'new,run':
         new(app, args, env, cmdloader)
+    if command == 'new-sbs' or command == 'new-sbs,run':
+        newSBS(app, args, env, cmdloader)
     if command == 'clean' or command == 'clean,run':
         clean(app)
     if command == 'new,run' or command == 'clean,run' or command == 'run':
@@ -116,6 +119,125 @@ def new(app, args, env, cmdloader=None):
         cmdloader.commands['dependencies'].execute(command='dependencies', app=app, args=['--sync'], env=env, cmdloader=cmdloader)
 
     print "~ OK, the application is created."
+    print "~ Start it with : play run %s" % sys.argv[2]
+    print "~ Have fun!"
+    print "~"
+
+def newSBS(app, args, env, cmdloader=None):
+    withModules = []
+    application_name = None
+    try:
+        optlist, args = getopt.getopt(args, '', ['with=', 'name='])
+        for o, a in optlist:
+            if o in ('--with'):
+                withModules = a.split(',')
+            if o in ('--name'):
+                application_name = a
+    except getopt.GetoptError, err:
+        print "~ %s" % str(err)
+        print "~ Sorry, unrecognized option"
+        print "~ "
+        sys.exit(-1)
+    if os.path.exists(app.path):
+        print "~ Oops. %s already exists" % app.path
+        print "~"
+        sys.exit(-1)
+
+    md = []
+    for m in withModules:
+        dirname = None
+        if os.path.exists(os.path.join(env["basedir"], 'modules/%s' % m)) and os.path.isdir(os.path.join(env["basedir"], 'modules/%s' % m)):
+            dirname = m
+        else:
+            for f in os.listdir(os.path.join(env["basedir"], 'modules')):
+                if os.path.isdir(os.path.join(env["basedir"], 'modules/%s' % f)) and f.find('%s-' % m) == 0:
+                    dirname = f
+                    break
+        
+        if not dirname:
+            print "~ Oops. No module %s found" % m
+            print "~ Try to install it using 'play install %s'" % m
+            print "~"
+            sys.exit(-1)
+
+        md.append(dirname)
+
+    print "~ The new application will be created in %s" % os.path.normpath(app.path)
+    if application_name is None:
+        application_name = raw_input("~ What is the application name? [%s] " % os.path.basename(app.path))
+    if application_name == "":
+        application_name = os.path.basename(app.path)
+
+    default_email = raw_input("~ Default email address (staff@digiplant.se if empty)? [%s] " % os.path.basename(app.path))
+    if default_email == "":
+        default_email = "staff@digiplant.se"
+    srv_user = raw_input("~ Server user name? [%s] " % os.path.basename(app.path))
+    db_name = raw_input("~ Name of the database? [%s] " % os.path.basename(app.path))
+    server_host = raw_input("~ Domain name of the deployment server (ansok.server.se if empty)? [%s] " % os.path.basename(app.path))
+    if server_host == "":
+        server_host = "ansok.server.se"
+    git_repo = raw_input("~ Name of the git repository (used in deployment, git@github.com:digiPlant/dummy.git if empty)? [%s] " % os.path.basename(app.path))
+    if git_repo == "":
+        git_repo = "git@github.com:digiPlant/dummy.git"
+    service_name = raw_input("~ Name of the service on the deployment server (play if empty)? [%s] " % os.path.basename(app.path))
+    if service_name == "":
+        service_name = "play"
+
+    copy_directory(os.path.join(env["basedir"], 'resources/sbs-skel'), app.path)
+    os.mkdir(os.path.join(app.path, 'app/models'))
+    os.mkdir(os.path.join(app.path, 'lib'))
+    app.check()
+    replaceAll(os.path.join(app.path, 'conf/application.conf'), r'%APPLICATION_NAME%', application_name)
+    replaceAll(os.path.join(app.path, 'conf/application.conf'), r'%SECRET_KEY%', secretKey())
+    replaceAll(os.path.join(app.path, 'conf/application.conf'), r'%SRV_USER%', srv_user)
+    replaceAll(os.path.join(app.path, 'conf/application.conf'), r'%DB_NAME%', db_name)
+    replaceAll(os.path.join(app.path, 'conf/application.conf'), r'%DEFAULT_EMAIL%', default_email)
+
+    replaceAll(os.path.join(app.path, 'deploy/deploy.rb'), r'%SRV_USER%', srv_user)
+    replaceAll(os.path.join(app.path, 'deploy/deploy.rb'), r'%GIT_REPO%', git_repo)
+    replaceAll(os.path.join(app.path, 'deploy/deploy.rb'), r'%SERVICE_NAME%', service_name)
+
+    replaceAll(os.path.join(app.path, 'deploy/deploy/production.rb'), r'%SRV_USER%', srv_user)
+    replaceAll(os.path.join(app.path, 'deploy/deploy/production.rb'), r'%SRV_HOST%', server_host)
+
+    replaceAll(os.path.join(app.path, 'deploy/server/play-service.conf'), r'%APPLICATION_NAME%', application_name)
+    replaceAll(os.path.join(app.path, 'deploy/server/play-service.conf'), r'%SRV_USER%', srv_user)
+
+    replaceAll(os.path.join(app.path, 'deploy/server/nginx-site.conf'), r'%SRV_HOST%', server_host)
+
+    print "~"
+
+    # Configure modules 
+    runDepsAfter = False
+    for m in md:
+        # Check dependencies.yml of the module
+        depsYaml = os.path.join(env["basedir"], 'modules/%s/conf/dependencies.yml' % m)
+        if os.path.exists(depsYaml):
+            deps = open(depsYaml).read()
+            try:
+                moduleDefinition = re.search(r'self:\s*(.*)\s*', deps).group(1)
+                replaceAll(os.path.join(app.path, 'conf/dependencies.yml'), r'- play\n', '- play\n    - %s\n' % moduleDefinition )
+                runDepsAfter = True
+            except Exception:
+                pass
+                
+    if runDepsAfter:
+        cmdloader.commands['dependencies'].execute(command='dependencies', app=app, args=['--sync'], env=env, cmdloader=cmdloader)
+
+    print "~ You created a new SBS Manager (but there are still some things to do):"
+    print "~   1. Create a repository in gitolite-admin"
+    print "~   2. Clone the repository"
+    print "~   3. Put this application in your local repository"
+    print "~   4. Put the SBS Manager Core as a submodule in repository/core (Core repository: git@github.com:digiPlant/sbsmanager.git)"
+    print "~   5. Set upp databases"
+    print "~   6. Add database user and passwords to conf/application.conf"
+    print "~   7. Start the app and go to http://localhost:9000/sbs/skrivbord/login/sysadmin and initialize the manager"
+    print "~"
+    print "~ Server presumptions:"
+    print "~   Play installed in: /opt/sbs-play"
+    print "~   Certificate + private key installed in (named [hostname].key and [hostname].cer): /etc/ssl/certs"
+    print "~   Application home beeing: /home/[username]/sbsmgr"
+    print "~"
     print "~ Start it with : play run %s" % sys.argv[2]
     print "~ Have fun!"
     print "~"

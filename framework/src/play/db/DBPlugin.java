@@ -42,7 +42,7 @@ public class DBPlugin extends PlayPlugin {
             if (!domain.equals("localhost")) {
                 serverOptions = new String[] {"-webAllowOthers"};
             }
-            
+
             h2Server = org.h2.tools.Server.createWebServer(serverOptions);
             h2Server.start();
 

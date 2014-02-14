@@ -161,6 +161,7 @@ try:
     print "~ Usage: play cmd [app_path] [--options]"
     print "~ "
     print "~ with,  new      Create a new application"
+    print "~        new-sbs  Create a new SBS Manager"
     print "~        run      Run the application in the current shell"
     print "~        help     Show play help"
     print "~"
