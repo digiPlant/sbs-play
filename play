@@ -162,6 +162,7 @@ try:
     print "~ "
     print "~ with,  new      Create a new application"
     print "~        new-sbs  Create a new SBS Manager"
+    print "~        git-sbs  Setup git environment for SBS Manager"
     print "~        run      Run the application in the current shell"
     print "~        help     Show play help"
     print "~"
