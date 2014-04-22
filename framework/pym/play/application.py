@@ -1,11 +1,11 @@
 import sys
-import os, os.path
+import os
+import os.path
 import re
 import shutil
 import socket
 
 from play.utils import *
-
 
 class ModuleNotFound(Exception):
     def __init__(self, value):
@@ -273,8 +273,14 @@ class PlayApplication(object):
 
         if application_mode == 'prod':
             java_args.append('-server')
-        # JDK 7 compat
-        java_args.append('-XX:-UseSplitVerifier')
+
+        javaVersion = getJavaVersion()
+        if javaVersion == "1.7":
+            # JDK 7 compat
+            java_args.append('-XX:-UseSplitVerifier')
+        elif javaVersion == "1.8":
+            java_args.append('-noverify')
+
         java_policy = self.readConf('java.policy')
         if java_policy != '':
             policyFile = os.path.join(self.path, 'conf', java_policy)
