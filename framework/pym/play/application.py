@@ -275,6 +275,7 @@ class PlayApplication(object):
             java_args.append('-server')
 
         javaVersion = getJavaVersion()
+        print "~ Running java version: %s" % javaVersion
         if javaVersion == "1.7":
             # JDK 7 compat
             java_args.append('-XX:-UseSplitVerifier')

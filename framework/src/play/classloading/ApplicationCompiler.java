@@ -64,7 +64,7 @@ public class ApplicationCompiler {
             javaVersion = CompilerOptions.VERSION_1_6;
         } else if("1.7".equals(Play.configuration.get("java.source"))) {
             javaVersion = CompilerOptions.VERSION_1_7;
-        }else if("1.8".equals(Play.configuration.get("java.source"))) {
+        } else if("1.8".equals(Play.configuration.get("java.source"))) {
             javaVersion = CompilerOptions.VERSION_1_8;
         }
         this.settings.put(CompilerOptions.OPTION_Source, javaVersion);

@@ -67,6 +67,7 @@ try:
 
     if showLogo:
         print "~ play! %s, http://www.playframework.org" % (play_env["version"])
+        print "~ play! basedir: %s" % play_env["basedir"]
 
     # ~~~~~~~~~~~~~~~~~~~~~~ Where is the application?
     application_path = None

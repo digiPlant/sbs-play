@@ -245,7 +245,6 @@ def getJavaVersion():
     sp = subprocess.Popen(["java", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     javaVersion = sp.communicate()
     javaVersion =  str( javaVersion)
-    
     if re.compile('1.5').search(javaVersion) is not None:
         return "1.5"  
     elif re.compile('1.6').search(javaVersion) is not None:
