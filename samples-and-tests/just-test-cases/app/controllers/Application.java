@@ -76,6 +76,29 @@ public class Application extends Controller {
         renderText("OK: " + re);
     }
 
+    public static void revRoute(String re) {
+    	Map<String,Object> par = new HashMap<String, Object>();
+    	par.put("re", re);
+    	String url = Router.reverse("Application.revRoute", par ).url;
+	renderText("OK[revRoute]: " + re + " URL: " + url); 
+    }
+
+    public static void ressourceWithoutSpecialCharacters(String appId, String verId) {
+        Map<String,Object> args = new HashMap<String, Object>();
+        args.put("appId", appId);
+        args.put("verId", verId);
+        String url = Router.reverse("Application.ressourceWithoutSpecialCharacters", args ).url;
+        renderText("OK[ressourceWithoutSpecialCharacters]: appId=" + appId + " verId=" + verId + " URL: " + url);
+    }
+    
+    public static void ressourceWithSpecialCharacters(String appId, String verId) {
+       Map<String,Object> args = new HashMap<String, Object>();
+       args.put("appId", appId);
+       args.put("verId", verId);
+       String url = Router.reverse("Application.ressourceWithSpecialCharacters", args ).url;
+       renderText("OK[ressourceWithSpecialCharacters]: appId=" + appId + " verId=" + verId + " URL: " + url);
+    }
+    
     public static void index() {
         routeArgs.put("lucky", "strike");
         render();
@@ -136,7 +159,7 @@ public class Application extends Controller {
     
     public static void book(Date at) {
         java.text.SimpleDateFormat df = new java.text.SimpleDateFormat("dd/MM/yy");
-        df.setTimeZone(TimeZone.getTimeZone("UTC"));
+        df.setTimeZone(TimeZone.getTimeZone("Etc/UTC"));
         renderText("Booked at %s !!", df.format(at));
     }
 
@@ -225,6 +248,12 @@ public class Application extends Controller {
         renderText("OK5");
     }
     
+
+    public static void mailwithpercentinsubject() {
+        notifiers.Welcome.subjectwithpercent();
+        renderText("OKPCT");
+    }
+
     public static void mailWithUrls() {
         notifiers.Welcome.welcome_mailWithUrls(false);
         renderText("OK_mailWithUrls");
@@ -241,6 +270,12 @@ public class Application extends Controller {
         new MailJob().now().get();
         renderText("OK_mailWithUrlsInJob");
     }
+
+    public static void mailWithEmbeddedImage() {
+        notifiers.Welcome.mailWithEmbeddedImage();
+        renderText("OK_mailWithEmbeddedImage");
+    }
+    
 
     public static void ifthenelse() {
         boolean a = true;
@@ -288,7 +323,7 @@ public class Application extends Controller {
     }
 
     public static void selectTag(){
-        List<User> users = new ArrayList<User>(10);
+        List<User> users = new ArrayList<User>(12);
         User user;
         for(long i = 0; i < 10; i++) {
         	user = new User("User-" + i);
@@ -296,6 +331,14 @@ public class Application extends Controller {
         	user.i = (int) i;
         	users.add(user);
         }
+        user = new User("User-%-10");
+        user.k = 10L;
+        user.i = (int) 10;
+        users.add(user);
+        user = new User("User-%%-11");
+        user.k = 11L;
+        user.i = (int) 11;
+        users.add(user);
         render(users);
     }
     

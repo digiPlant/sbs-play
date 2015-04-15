@@ -11,6 +11,7 @@ import play.data.validation.Validation;
 import play.db.Model;
 import play.exceptions.BinderException;
 import play.exceptions.UnexpectedException;
+import play.i18n.Lang;
 
 import java.io.File;
 import java.lang.annotation.Annotation;
@@ -20,6 +21,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.text.DecimalFormatSymbols;
 import java.math.BigDecimal;
+import java.text.DecimalFormatSymbols;
 import java.util.*;
 
 
@@ -385,8 +387,14 @@ public abstract class Binder {
         }
 
         Class componentClass = String.class;
+        Type componentType = String.class;
         if (type instanceof ParameterizedType) {
-            componentClass = (Class) ((ParameterizedType) type).getActualTypeArguments()[0];
+            componentType = ((ParameterizedType) type).getActualTypeArguments()[0];
+            if(componentType instanceof ParameterizedType) {
+                componentClass = (Class) ((ParameterizedType) componentType).getRawType();
+            } else {
+                componentClass = (Class) componentType;
+            }
         }
 
         if (paramNode.getAllChildren().isEmpty()) {
@@ -412,7 +420,7 @@ public abstract class Binder {
             Collection l = (Collection) clazz.newInstance();
             for (int i = 0; i < values.length; i++) {
                 try {
-                    Object value = directBind(paramNode.getOriginalKey(), bindingAnnotations.annotations, values[i], componentClass, componentClass);
+                    Object value = directBind(paramNode.getOriginalKey(), bindingAnnotations.annotations, values[i], componentClass, componentType);
                     l.add(value);
                 } catch (Exception e) {
                     // Just ignore the exception and continue on the next item
@@ -443,7 +451,7 @@ public abstract class Binder {
 
             for (String index : indexes) {
                 ParamNode child = paramNode.getChild(index);
-                Object childValue = internalBind(child, componentClass, componentClass, bindingAnnotations);
+                Object childValue = internalBind(child, componentClass, componentType, bindingAnnotations);
                 if (childValue != NO_BINDING && childValue != MISSING) {
 
                     // must make sure we place the value at the correct position
@@ -464,7 +472,7 @@ public abstract class Binder {
         }
 
         for (ParamNode child : paramNode.getAllChildren()) {
-            Object childValue = internalBind(child, componentClass, componentClass, bindingAnnotations);
+            Object childValue = internalBind(child, componentClass, componentType, bindingAnnotations);
             if (childValue != NO_BINDING && childValue != MISSING) {
                 r.add(childValue);
             }
@@ -529,19 +537,25 @@ public abstract class Binder {
         }
     }
 
-    static String fixNumberInput( String value ){
-        DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale(Lang.get()));
-        String numberGroupingChar = ""+symbols.getGroupingSeparator();
-        String decimalChar = ""+symbols.getDecimalSeparator();
+	/**
+	 * This method is called when binding numbers, it normalizes the dot notation according to the locale
+	 *
+	 * @param value the string number value
+	 * @return a normalized string
+	 */
+	static String fixNumberInput(String value) {
+		DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale(Lang.get()));
+		String numberGroupingChar = "" + symbols.getGroupingSeparator();
+		String decimalChar = "" + symbols.getDecimalSeparator();
 
-        if( value.contains(numberGroupingChar) ) value = value.replace(numberGroupingChar, "");
-        if( value.contains(decimalChar) ) value = value.replace(decimalChar, ".");
+		if (value.contains(numberGroupingChar)) value = value.replace(numberGroupingChar, "");
+		if (value.contains(decimalChar)) value = value.replace(decimalChar, ".");
 
-        if( value.contains(" ") ) value = value.replace(" ", "");
-        if( value.contains(",") ) value = value.replace(",", ".");
+		if (value.contains(" ")) value = value.replace(" ", "");
+		if (value.contains(",")) value = value.replace(",", ".");
 
-        return value;
-    }
+		return value;
+	}
 
     // If internalDirectBind was not able to bind it, it returns a special variable instance: DIRECTBIND_MISSING
     // Needs this because sometimes we need to know if no value was returned..
@@ -608,7 +622,9 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0 : null;
             }
-            value = fixNumberInput( value );
+
+	        value = fixNumberInput(value);
+
             return Integer.parseInt(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
 
@@ -617,7 +633,9 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0l : null;
             }
-            value = fixNumberInput( value );
+
+	        value = fixNumberInput(value);
+
             return Long.parseLong(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
 
@@ -636,6 +654,8 @@ public abstract class Binder {
                 return clazz.isPrimitive() ? (short) 0 : null;
             }
 
+	        value = fixNumberInput(value);
+
             return Short.parseShort(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
 
@@ -644,7 +664,9 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0f : null;
             }
-            value = fixNumberInput( value );
+
+	        value = fixNumberInput(value);
+
             return Float.parseFloat(value);
         }
 
@@ -653,7 +675,9 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0d : null;
             }
-            value = fixNumberInput( value );
+
+	        value = fixNumberInput(value);
+
             return Double.parseDouble(value);
         }
 

@@ -93,18 +93,26 @@ public class Messages {
         if (locales.containsKey(locale)) {
             value = locales.get(locale).getProperty(key.toString());
         }
+        if (value == null && locale != null && locale.length() == 5 && locales.containsKey(locale.substring(0, 2))) {
+            value = locales.get(locale.substring(0, 2)).getProperty(key.toString());
+        }
         if (value == null) {
             value = defaults.getProperty(key.toString());
         }
         if (value == null) {
             value = key.toString();
         }
-
-        return formatString(value, args);
+        Locale l = Lang.getLocaleOrDefault(locale);
+        return formatString(l, value, args);
     }
 
     public static String formatString(String value, Object... args) {
-        String message = String.format(value, coolStuff(value, args));
+        return formatString(Lang.getLocale(), value, args);
+    }
+
+    public static String formatString(Locale locale, String value, Object... args) {
+        String message = String.format(locale, value, coolStuff(value, args));
+
         Matcher matcher = recursive.matcher(message);
         StringBuffer sb = new StringBuffer();
         while(matcher.find()) {
@@ -171,7 +179,13 @@ public class Messages {
     public static Properties all(String locale) {
         if(locale == null || "".equals(locale))
             return defaults;
-        return locales.get(locale);
+        Properties mergedMessages = new Properties();
+        mergedMessages.putAll(defaults);
+        if (locale != null && locale.length() == 5 && locales.containsKey(locale.substring(0, 2))) {
+        	mergedMessages.putAll(locales.get(locale.substring(0, 2)));
+        }
+        mergedMessages.putAll(locales.get(locale));
+        return mergedMessages;
     }
 
 }

@@ -62,7 +62,7 @@ public class RestTest extends UnitTest {
         assertTrue(getResponse.getStatus() == 200);
         List<Header> getResponseHeaders = getResponse.getHeaders();
         for (int i = 0; i < getResponseHeaders.size(); i++) {
-            if (!"Set-Cookie".equals(getResponseHeaders.get(i).name)) {
+            if (!"Date".equals(getResponseHeaders.get(i).name) && !"Set-Cookie".equals(getResponseHeaders.get(i).name)) {
                 assertEquals(getResponseHeaders.get(i).value(), headResponseHeaders.get(i).value());
             }
         }
@@ -147,6 +147,13 @@ public class RestTest extends UnitTest {
     @Test
     public void testWSAsyncWithException() {
         String url = "http://localhost:9003/SlowResponseTestController/testWSAsyncWithException";
+        String res = WS.url(url).get().getString();
+        assertEquals("ok", res);
+    }
+
+    @Test
+    public void testWSAsyncAwaitAllWithException() {
+        String url = "http://localhost:9003/SlowResponseTestController/testWSAsyncAwaitAllWithException";
         String res = WS.url(url).get().getString();
         assertEquals("ok", res);
     }
