@@ -3,6 +3,7 @@ package play.db.jpa;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.util.*;
+
 import javax.persistence.*;
 
 import org.apache.commons.lang.StringUtils;
@@ -11,6 +12,7 @@ import play.Play;
 import play.classloading.enhancers.LVEnhancer;
 import play.data.binding.BeanWrapper;
 import play.data.binding.Binder;
+import play.data.binding.BindingAnnotations;
 import play.data.binding.ParamNode;
 import play.data.validation.Validation;
 import play.exceptions.UnexpectedException;
@@ -54,7 +56,9 @@ public class GenericModel extends JPABase {
      *
      *  public static <T extends JPABase> T edit(ParamNode rootParamNode, String name, Object o, Annotation[] annotations)
      *
-     * @return
+     * @see GenericModel#edit(ParamNode, String, Object, Annotation[])
+     * 
+     * @return the entity
      */
     @Deprecated
     public static Object edit(Object o, String name, Map<String, String[]> params, Annotation[] annotations) {
@@ -74,7 +78,7 @@ public class GenericModel extends JPABase {
             BeanWrapper bw = BeanWrapper.forClass(o.getClass());
             // Start with relations
             Set<Field> fields = new HashSet<Field>();
-            Class clazz = o.getClass();
+            Class<?> clazz = o.getClass();
             while (!clazz.equals(Object.class)) {
                 Collections.addAll(fields, clazz.getDeclaredFields());
                 clazz = clazz.getSuperclass();
@@ -83,13 +87,21 @@ public class GenericModel extends JPABase {
                 boolean isEntity = false;
                 String relation = null;
                 boolean multiple = false;
-                //
+                
+                // First try the field 
+                Annotation[] fieldAnnotations = field.getAnnotations();
+                // and check with the profiles annotations
+                final BindingAnnotations bindingAnnotations = new BindingAnnotations(fieldAnnotations, new BindingAnnotations(annotations).getProfiles());
+                if (bindingAnnotations.checkNoBinding()) {
+                    continue;
+                }
+                
                 if (field.isAnnotationPresent(OneToOne.class) || field.isAnnotationPresent(ManyToOne.class)) {
                     isEntity = true;
                     relation = field.getType().getName();
                 }
                 if (field.isAnnotationPresent(OneToMany.class) || field.isAnnotationPresent(ManyToMany.class)) {
-                    Class fieldType = (Class) ((ParameterizedType) field.getGenericType()).getActualTypeArguments()[0];
+                    Class<?> fieldType = (Class<?>) ((ParameterizedType) field.getGenericType()).getActualTypeArguments()[0];
                     isEntity = true;
                     relation = fieldType.getName();
                     multiple = true;
@@ -115,7 +127,7 @@ public class GenericModel extends JPABase {
                                 // Remove it to prevent us from finding it again later
                                 fieldParamNode.removeChild(keyName, removedNodesList);
                                 for (String _id : ids) {
-                                    if (_id.equals("")) {
+                                    if (_id == null || _id.equals("")) {
                                         continue;
                                     }
                                     Query q = em.createQuery("from " + relation + " where " + keyName + " = ?1");

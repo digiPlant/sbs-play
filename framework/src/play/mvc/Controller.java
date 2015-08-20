@@ -441,7 +441,7 @@ public class Controller implements ControllerSupport {
     /**
      * Check that the token submitted from a form is valid.
      *
-     * @see play.templates.FastTags._authenticityToken()
+     * @see play.templates.FastTags#_authenticityToken
      */
     protected static void checkAuthenticity() {
         if(Scope.Params.current().get("authenticityToken") == null || !Scope.Params.current().get("authenticityToken").equals(Scope.Session.current().getAuthenticityToken())) {
@@ -526,7 +526,7 @@ public class Controller implements ControllerSupport {
             }
             throw new RedirectToStatic(Router.reverse(Play.getVirtualFile(file)));
         } catch (NoRouteFoundException e) {
-            StackTraceElement element = PlayException.getInterestingStrackTraceElement(e);
+            StackTraceElement element = PlayException.getInterestingStackTraceElement(e);
             if (element != null) {
                 throw new NoRouteFoundException(file, Play.classes.getApplicationClass(element.getClassName()), element.getLineNumber());
             } else {
@@ -609,7 +609,7 @@ public class Controller implements ControllerSupport {
                     throw new Redirect(actionDefinition.toString(), permanent);
                 }
             } catch (NoRouteFoundException e) {
-                StackTraceElement element = PlayException.getInterestingStrackTraceElement(e);
+                StackTraceElement element = PlayException.getInterestingStackTraceElement(e);
                 if (element != null) {
                     throw new NoRouteFoundException(action, newArgs, Play.classes.getApplicationClass(element.getClassName()), element.getLineNumber());
                 } else {
@@ -675,7 +675,7 @@ public class Controller implements ControllerSupport {
             if (ex.isSourceAvailable()) {
                 throw ex;
             }
-            StackTraceElement element = PlayException.getInterestingStrackTraceElement(ex);
+            StackTraceElement element = PlayException.getInterestingStackTraceElement(ex);
             if (element != null) {
                 ApplicationClass applicationClass = Play.classes.getApplicationClass(element.getClassName());
                 if (applicationClass != null) {
@@ -894,7 +894,7 @@ public class Controller implements ControllerSupport {
      * <p><b>Important:</b> The method will not resume on the line after you call this. The method will
      * be called again as if there was a new HTTP request.
      *
-     * @param tasks
+     * @param task
      */
     @Deprecated
     protected static void waitFor(Future<?> task) {
