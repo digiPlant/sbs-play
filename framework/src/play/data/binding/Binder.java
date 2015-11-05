@@ -547,6 +547,26 @@ public abstract class Binder {
         }
     }
 
+    /**
+     * This method is called when binding numbers, it normalizes the dot notation according to the locale
+     *
+     * @param value the string number value
+     * @return a normalized string
+     */
+    static String fixNumberInput(String value) {
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale(Lang.get()));
+        String numberGroupingChar = "" + symbols.getGroupingSeparator();
+        String decimalChar = "" + symbols.getDecimalSeparator();
+
+        if (value.contains(numberGroupingChar)) value = value.replace(numberGroupingChar, "");
+        if (value.contains(decimalChar)) value = value.replace(decimalChar, ".");
+
+        if (value.contains(" ")) value = value.replace(" ", "");
+        if (value.contains(",")) value = value.replace(",", ".");
+
+        return value;
+    }
+
     // If internalDirectBind was not able to bind it, it returns a special variable instance: DIRECTBIND_MISSING
     // Needs this because sometimes we need to know if no value was returned..
     private static Object internalDirectBind(String name, Annotation[] annotations, String value, Class<?> clazz, Type type) throws Exception {
@@ -612,6 +632,7 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0 : null;
             }
+            value = fixNumberInput(value);
 
             return Integer.parseInt(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
@@ -621,6 +642,7 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0l : null;
             }
+            value = fixNumberInput(value);
 
             return Long.parseLong(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
@@ -648,6 +670,7 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0f : null;
             }
+            value = fixNumberInput(value);
 
             return Float.parseFloat(value);
         }
@@ -657,6 +680,7 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0d : null;
             }
+            value = fixNumberInput(value);
 
             return Double.parseDouble(value);
         }
