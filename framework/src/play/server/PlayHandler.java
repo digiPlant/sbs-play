@@ -397,7 +397,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
         if (ctx.getChannel().isOpen()) {
             f = ctx.getChannel().write(nettyResponse);
         } else {
-            Logger.error("Try to write on a closed channel[keepAlive:%s]", keepAlive);
+            Logger.debug("Try to write on a closed channel[keepAlive:%s]: Remote host may have closed the connection", String.valueOf(keepAlive));
         }
 
         // Decide whether to close the connection or not.
@@ -443,6 +443,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             stream = (ChunkedInput) obj;
         }
 
+       
         final boolean keepAlive = isKeepAlive(nettyRequest);
         if (file != null && file.isFile()) {
             try {
@@ -460,15 +461,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
                         writeFuture.addListener(ChannelFutureListener.CLOSE);
                     }
                 } else {
-                    try {
                     FileService.serve(file, nettyRequest, nettyResponse, ctx, request, response, ctx.getChannel());
-                    } catch (Throwable exx) {
-                        
-                        try {
-                            ctx.getChannel().close();
-                        } catch (Throwable ex) { /* Left empty */ }
-                    }
-
                 }
             } catch (Exception e) {
                 throw e;
@@ -518,6 +511,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             Logger.trace("parseRequest: begin");
             Logger.trace("parseRequest: URI = " + nettyRequest.getUri());
         }
+
         String uri = nettyRequest.getUri();
         // Remove domain and port from URI if it's present.
         if (uri.startsWith("http://") || uri.startsWith("https://")) {
@@ -850,7 +844,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             Logger.trace("serve500: end");
         }
     }
-    
+
     public void serveStatic(RenderStatic renderStatic, ChannelHandlerContext ctx, Request request, Response response, HttpRequest nettyRequest, MessageEvent e) {
         if (Logger.isTraceEnabled()) {
             Logger.trace("serveStatic: begin");
@@ -871,7 +865,7 @@ public class PlayHandler extends SimpleChannelUpstreamHandler {
             if ((file == null || !file.exists())) {
                 serve404(new NotFound("The file " + renderStatic.file + " does not exist"), ctx, request, nettyRequest);
             } else {
-                boolean raw = Play.pluginCollection.serveStatic(file, request, response);
+                boolean raw = Play.pluginCollection.serveStatic(file, Request.current(), Response.current());
                 if (raw) {
                     copyResponse(ctx, request, response, nettyRequest);
                 } else {

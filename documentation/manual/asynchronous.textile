@@ -139,7 +139,7 @@ bc. public class MyWebSocket extends WebSocketController {
     }
 }
 
-In this example, when the client connects to the socket, it receives the ‘Hello Guillaume’ message, and then Play closes the socket.
+Here when the client connects to the socket, it receive the ‘Hello Guillaume’ message, and then Play closes the socket.
 
 Of course usually you don’t want to close the socket immediately. But it is easy to achieve using @await(…)@ and continuations.
 
@@ -169,11 +169,11 @@ bc. public class MyWebSocket extends WebSocketController {
  
 }
 
-In this example, the nested ‘if’ and ‘cast’ soup was tedious to write and error prone. And here Java sucks. Even for this simple case it is not easy to handle. And for more complicated cases where you combine several streams and have even more event types, it becomes a nightmare.
+In the previous example, the nested ‘if’ and ‘cast’ soup was tedious to write and error prone. And here Java sucks. Even for this simple case it is not easy to handle. And for more complicated cases where you combine several streams, and have even more event types, it becomes a nightmare.
 
 That’s why we have introduced a basic pattern matching in Java in the "play.libs.F":libs#FunctionalprogrammingwithJava library.
 
-So with some static imports, we can rewrite our previous echo sample as:
+So we can rewrite our previous echo sample as:
 
 bc. public static void echo() {
     while(inbound.isOpen()) {
@@ -196,4 +196,4 @@ bc. public static void echo() {
 
 p(note). **Continuing the discussion**
  
-Next, doing %(next)"Ajax requests":ajax%.
+Next, doing %(next)"Ajax request":ajax%.

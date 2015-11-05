@@ -1,207 +1,319 @@
 package play.db;
 
-import play.Logger;
-import play.exceptions.DatabaseException;
-
-import java.io.PrintWriter;
-import java.io.StringWriter;
+import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.ResultSet;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.HashMap;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+
+import javax.sql.DataSource;
+import javax.sql.RowSet;
+import javax.sql.rowset.CachedRowSet;
+
+import org.hibernate.internal.SessionImpl;
+
+import com.sun.rowset.CachedRowSetImpl;
+
+import play.db.jpa.JPA;
+import play.exceptions.DatabaseException;
+import play.Logger;
+
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Database connection utilities.
- *
- * This class holds reference to all DB configurations.
- * Each configuration has its own instance of DBConfig.
- *
- * dbConfigName corresponds to properties-names in application.conf.
- *
- * The default DBConfig is the one configured using 'db.' in application.conf
- *
- * dbConfigName = 'other' is configured like this:
- *
- * db_other = mem
- * db_other.user = batman
- *
- * This class also preserves backward compatibility by
- * directing static methods to the default DBConfig-instance
  */
 public class DB {
 
-    private static Map<String, DBConfig> dbConfigs = new HashMap<String, DBConfig>(1);
-    private static DBConfig defaultDBConfig = null;
+    /**
+     * The loaded datasource.
+     * @see ExtendedDatasource
+     */
+    protected static final Map<String, ExtendedDatasource> datasources = new ConcurrentHashMap<String, ExtendedDatasource>();
 
+    public static class ExtendedDatasource {
+
+        /**
+         * Connection to the physical data source
+         */
+        private DataSource datasource;
+
+        /**
+         * The method used to destroy the data source
+         */
+        private String destroyMethod;
+
+        public ExtendedDatasource(DataSource ds, String destroyMethod) {
+            this.datasource = ds;
+            this.destroyMethod = destroyMethod;
+        }
+
+        public String getDestroyMethod() {
+            return destroyMethod;
+        }
+
+        public DataSource getDataSource() {
+            return datasource;
+        }
+
+    }
 
     /**
-     * Sets the new list of db configurations.
-     * Tries to preserve existing config if not changed
-     * @param dbConfigNames
+     * @deprecated Use datasources instead
+     * @since 1.3.0
+     * @see #datasources
+     * @see ExtendedDatasource
      */
-    protected static void setConfigurations(List<String> dbConfigNames) {
+    @Deprecated
+    public static DataSource datasource = null;
+    /**
+     * The method used to destroy the datasource
+     * 
+     * @deprecated Use datasources instead
+     * @since 1.3.0
+     * @see #datasources
+     * @see ExtendedDatasource
+     */
+    @Deprecated
+    public static String destroyMethod = "";
 
-        // remember old configs to detect what has been removed
-        List<String> oldNames = new ArrayList<String>();
-        oldNames.addAll( dbConfigs.keySet());
+    public final static String DEFAULT = "default";
 
-        for (String dbConfigName : dbConfigNames) {
-            DBConfig dbConfig = dbConfigs.get(dbConfigName);
-            if (dbConfig!=null) {
-                // Config with this name already exists
-                dbConfig.configure();
-                oldNames.remove(dbConfigName);
-            } else {
-                // must add new config
-                dbConfig = new DBConfig(dbConfigName);
-                if (dbConfig.configure()) {
-                    // The database was configured - lets add it..
-                    dbConfigs.put(dbConfigName, dbConfig);
-                    if (DBConfig.defaultDbConfigName.equals(dbConfigName)) {
-                        defaultDBConfig = dbConfig;
-                    }
-                }
+    static ThreadLocal<Map<String, Connection>> localConnection = new ThreadLocal<Map<String, Connection>>();
+
+    public static DataSource getDataSource(String name) {
+        if (datasources.get(name) != null) {
+            return datasources.get(name).getDataSource();
+        }
+        return null;
+    }
+
+    public static DataSource getDataSource() {
+        return getDataSource(DEFAULT);
+    }
+
+    public static Connection getConnection(String name, boolean autocommit) {
+        try {
+            Connection connection = getDataSource(name).getConnection();
+            connection.setAutoCommit(autocommit);
+            return connection;
+        } catch (Exception e) {
+            // Exception
+            throw new DatabaseException(e.getMessage());
+        }
+    }
+
+    private static Connection getLocalConnection(String name) {
+        Map<String, Connection> map = localConnection.get();
+        if (map != null) {
+            Connection connection = map.get(name);
+            return connection;
+        }
+        return null;
+    }
+
+    private static void registerLocalConnection(String name, Connection connection) {
+        Map<String, Connection> map = localConnection.get();
+        if (map == null) {
+            map = new HashMap<String, Connection>();
+        }
+        map.put(name, connection);
+        localConnection.set(map);
+    }
+
+    /**
+     * Close all the open connections for the current thread.
+     */
+    public static void closeAll() {
+        Map<String, Connection> map = localConnection.get();
+        if (map != null) {
+            Set<String> keySet = new HashSet<String>(map.keySet());
+            for (String name : keySet) {
+                close(name);
             }
         }
-
-        // names left in oldNames should be removed
-        for (String nameToRemove : oldNames) {
-            // must delete the removed DBConfig
-            DBConfig dbConfig = dbConfigs.get(nameToRemove);
-            if (dbConfig != null) {
-                dbConfig.destroy();
-            }
-            // remove it from the list
-            dbConfigs.remove(nameToRemove);
-        }
     }
 
     /**
-     * The default DBConfig is the one configured using 'db.' in application.conf
-     *
-     * @return the default DBConfig
-     */
-    public static DBConfig getDBConfig() {
-        return defaultDBConfig;
-    }
-
-    /**
-     * dbConfigName corresponds to properties-names in application.conf.
-     *
-     * The default dbConfig is named 'play', and is the one configured using 'db.' in application.conf
-     *
-     * dbConfigName = 'other' is configured like this:
-     *
-     * db_other = mem
-     * db_other.user = batman
-     *
-     * An exception is thrown if the config is not found
-     *
-     * @param dbConfigName name of the config
-     * @return a DBConfig specified by name
-     */
-    public static DBConfig getDBConfig(String dbConfigName) {
-        return getDBConfig(dbConfigName, false);
-    }
-
-    /**
-     * dbConfigName corresponds to properties-names in application.conf.
-     *
-     * The default dbConfig is named 'play', and is the one configured using 'db.' in application.conf
-     *
-     * dbConfigName = 'other' is configured like this:
-     *
-     * db_other = mem
-     * db_other.user = batman
-     *
-     * An exception is thrown if the config is not found, unless ignoreError == true
-     *
-     * @param dbConfigName name of the config
-     * @param ignoreError set to true if null should be returned if config is missing
-     * @return a DBConfig specified by name
-     */
-    public static DBConfig getDBConfig(String dbConfigName, boolean ignoreError) {
-        DBConfig dbConfig = dbConfigs.get(dbConfigName);
-        if (dbConfig==null && ignoreError == false) {
-            throw new RuntimeException("No DBConfig found with the name " + dbConfigName);
-        }
-        return dbConfig;
-    }
-
-    /**
-     * Close all connections opened for the current thread.
+     * Close all the open connections for the current thread.
      */
     public static void close() {
-        boolean error = false;
-        for (DBConfig dbConfig : dbConfigs.values()) {
-            // do our best to close all connections
-            try {
-                dbConfig.close();
-            } catch (Exception e) {
-                Logger.error("Error closing connection", e);
-                error = true;
+        close(DEFAULT);
+    }
+
+    /**
+     * Close an given open connections for the current thread
+     */
+    public static void close(String name) {
+        Map<String, Connection> map = localConnection.get();
+        if (map != null) {
+            Connection connection = map.get(name);
+            if (connection != null) {
+                map.remove(name);
+                localConnection.set(map);
+                try {
+                    connection.close();
+                } catch (Exception e) {
+                    throw new DatabaseException("It's possible than the connection '" + name
+                            + "'was not properly closed !", e);
+                }
             }
-        }
-        if (error) {
-            throw new DatabaseException("Error closing one or more connections");
         }
     }
 
     /**
      * Open a connection for the current thread.
+     * 
      * @return A valid SQL connection
      */
+    public static Connection getConnection(String name) {
+        try {
+            if (JPA.isEnabled()) {
+                return ((SessionImpl) ((org.hibernate.ejb.EntityManagerImpl) JPA.em(name)).getSession()).connection();
+            }
+
+            final Connection localConnection = getLocalConnection(name);
+            if (localConnection != null) {
+                return localConnection;
+            }
+
+            // We have no connection
+            Connection connection = getDataSource(name).getConnection();
+            registerLocalConnection(name, connection);
+            return connection;
+        } catch (NullPointerException e) {
+            if (getDataSource(name) == null) {
+                throw new DatabaseException("No database found. Check the configuration of your application.", e);
+            }
+            throw e;
+        } catch (Exception e) {
+            // Exception
+            throw new DatabaseException(e.getMessage());
+        }
+    }
+
     public static Connection getConnection() {
-        return defaultDBConfig.getConnection();
+        return getConnection(DEFAULT);
     }
 
     /**
      * Execute an SQL update
+     * 
      * @param SQL
-     * @return true if the next result is a ResultSet object; false if it is an update count or there are no more results 
+     * @return true if the next result is a ResultSet object; false if it is an
+     *         update count or there are no more results
      */
+    public static boolean execute(String name, String SQL) {
+        Statement statement = null;
+        try {
+            statement = getConnection(name).createStatement();
+            if (statement != null) {
+                return statement.execute(SQL);
+            }
+        } catch (SQLException ex) {
+            throw new DatabaseException(ex.getMessage(), ex);
+        } finally {
+            safeCloseStatement(statement);
+        }
+        return false;
+    }
+
     public static boolean execute(String SQL) {
-        return defaultDBConfig.execute(SQL);
+        return execute(DEFAULT, SQL);
+    }
+
+    public static RowSet executeQuery(String SQL) {
+        return executeQuery(DEFAULT, SQL);
     }
 
     /**
      * Execute an SQL query
+     * 
      * @param SQL
-     * @return The query resultSet
+     * @return The rowSet of the query
      */
-    public static ResultSet executeQuery(String SQL) {
-        return defaultDBConfig.executeQuery(SQL);
+    public static RowSet executeQuery(String name, String SQL) {
+        Statement statement = null;
+        ResultSet rs = null;
+        try {
+            statement = getConnection(name).createStatement();
+            if (statement != null) {
+                rs = statement.executeQuery(SQL);
+            }
+
+            // Need to use a CachedRowSet that caches its rows in memory, which
+            // makes it possible to operate without always being connected to
+            // its data source
+            CachedRowSet rowset = new CachedRowSetImpl();
+            rowset.populate(rs);
+            return rowset;
+        } catch (SQLException ex) {
+            throw new DatabaseException(ex.getMessage(), ex);
+        } finally {
+            safeCloseResultSet(rs);
+            safeCloseStatement(statement);
+        }
+    }
+
+    public static void safeCloseResultSet(ResultSet resultSet) {
+        if (resultSet != null) {
+            try {
+                resultSet.close();
+            } catch (SQLException ex) {
+                throw new DatabaseException(ex.getMessage(), ex);
+            }
+        }
+    }
+
+    public static void safeCloseStatement(Statement statement) {
+        if (statement != null) {
+            try {
+                statement.close();
+            } catch (SQLException ex) {
+                throw new DatabaseException(ex.getMessage(), ex);
+            }
+        }
     }
 
     /**
-     * Destroy the datasources
+     * Destroy the datasource
+     */
+    public static void destroy(String name) {
+        try {
+            ExtendedDatasource extDatasource = datasources.get(name);
+            if (extDatasource != null && extDatasource.getDestroyMethod() != null) {
+                Method close = extDatasource.datasource.getClass().getMethod(extDatasource.getDestroyMethod(),
+                        new Class[] {});
+                if (close != null) {
+                    close.invoke(extDatasource.getDataSource(), new Object[] {});
+                    datasources.remove(name);
+                    DB.datasource = null;
+                    Logger.trace("Datasource destroyed");
+                }
+            }
+        } catch (Throwable t) {
+            Logger.error("Couldn't destroy the datasource", t);
+        }
+    }
+
+    /**
+     * Destroy the datasource
      */
     public static void destroy() {
-        for (DBConfig dbConfig : dbConfigs.values()) {
-            dbConfig.destroy();
-        }
-        dbConfigs.clear();
+        destroy(DEFAULT);
     }
 
     /**
-     * @return status string for all configured dbConfigs
+     * Destroy all datasources
      */
-    protected static String getStatus() {
-        StringWriter sw = new StringWriter();
-        PrintWriter out = new PrintWriter(sw);
-
-        for (DBConfig dbConfig : dbConfigs.values()) {
-            out.print(dbConfig.getStatus());
+    public static void destroyAll() {
+        Set<String> keySet = new HashSet<String>(datasources.keySet());
+        for (String name : keySet) {
+            destroy(name);
         }
-
-        return sw.toString();
     }
-
-    public static Collection<DBConfig> getDBConfigs() {
-        return dbConfigs.values();
-    }
-
 }

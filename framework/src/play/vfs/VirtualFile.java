@@ -165,7 +165,6 @@ public class VirtualFile {
         } catch (FileNotFoundException e) {
             return null;
         }
-
     }
 
     public static VirtualFile open(String file) {

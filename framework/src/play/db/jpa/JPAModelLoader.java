@@ -36,24 +36,13 @@ import play.exceptions.UnexpectedException;
 
 public class JPAModelLoader implements Model.Factory {
 
-    private final Class<? extends Model> clazz;
-    private final String jpaConfigName;
-    private JPAConfig _jpaConfig;
+    private String dbName;
+    private Class<? extends Model> clazz;
     private Map<String, Model.Property> properties;
-
 
     public JPAModelLoader(Class<? extends Model> clazz) {
         this.clazz = clazz;
-
-        // must detect correct JPAConfig for this model
-        this.jpaConfigName = Entity2JPAConfigResolver.getJPAConfigNameForEntityClass(clazz);
-    }
-
-    protected JPAContext getJPAContext() {
-        if (_jpaConfig == null) {
-            _jpaConfig = JPA.getJPAConfig(jpaConfigName);
-        }
-        return _jpaConfig.getJPAContext();
+        this.dbName = JPA.getDBName(clazz);
     }
 
     /**
@@ -62,12 +51,10 @@ public class JPAModelLoader implements Model.Factory {
      */
     public Model findById(Object id) {
         try {
-
             if (id == null) {
                 return null;
             }
-            return getJPAContext().em().find(clazz, id);
-
+            return JPA.em(this.dbName).find(this.clazz, id);
         } catch (Exception e) {
             // Key is invalid, thus nothing was found
             return null;
@@ -94,10 +81,11 @@ public class JPAModelLoader implements Model.Factory {
      * @return a list of results
      */
     @SuppressWarnings("unchecked")
-    public List<Model> fetch(int offset, int size, String orderBy, String order, List<String> searchFields, String keywords, String where) {
+    public List<Model> fetch(int offset, int size, String orderBy, String order, List<String> searchFields,
+            String keywords, String where) {
         StringBuilder q = new StringBuilder("from ").append(this.clazz.getName());
-        if (keywords != null && !keywords.equals("")) {
-            String searchQuery = getSearchQuery(searchFields);
+        if (keywords != null && !keywords.isEmpty()) {
+            String searchQuery = this.getSearchQuery(searchFields);
             if (!searchQuery.equals("")) {
                 q.append(" where (").append(searchQuery).append(")");
             }
@@ -108,8 +96,7 @@ public class JPAModelLoader implements Model.Factory {
         if (orderBy == null && order == null) {
             orderBy = "id";
             order = "ASC";
-        }
-        if (orderBy == null && order != null) {
+        } else if (orderBy == null && order != null) {
             orderBy = "id";
         }
         if (order == null || (!order.equals("ASC") && !order.equals("DESC"))) {
@@ -117,7 +104,7 @@ public class JPAModelLoader implements Model.Factory {
         }
         q.append( " order by ").append(orderBy).append(" ").append(order);
         String jpql = q.toString();
-        Query query = getJPAContext().em().createQuery(jpql);
+        Query query = JPA.em(this.dbName).createQuery(jpql);
         if (keywords != null && !keywords.equals("") && jpql.indexOf("?1") != -1) {
             query.setParameter(1, "%" + keywords.toLowerCase() + "%");
         }
@@ -130,7 +117,7 @@ public class JPAModelLoader implements Model.Factory {
      * 
      */
     public Long count(List<String> searchFields, String keywords, String where) {
-        String q = "select count(*) from " + clazz.getName() + " e";
+        String q = "select count(*) from " + this.clazz.getName() + " e";
         if (keywords != null && !keywords.equals("")) {
             String searchQuery = getSearchQuery(searchFields);
             if (!searchQuery.equals("")) {
@@ -140,7 +127,7 @@ public class JPAModelLoader implements Model.Factory {
         } else {
             q += (where != null ? " where " + where : "");
         }
-        Query query = getJPAContext().em().createQuery(q);
+        Query query = JPA.em(this.dbName).createQuery(q);
         if (keywords != null && !keywords.equals("") && q.indexOf("?1") != -1) {
             query.setParameter(1, "%" + keywords.toLowerCase() + "%");
         }
@@ -151,7 +138,7 @@ public class JPAModelLoader implements Model.Factory {
      * 
      */
     public void deleteAll() {
-        getJPAContext().em().createQuery("delete from " + clazz.getName()).executeUpdate();
+        JPA.em(this.dbName).createQuery("delete from " + this.clazz.getName()).executeUpdate();
     }
 
     /**
@@ -160,7 +147,7 @@ public class JPAModelLoader implements Model.Factory {
     public List<Model.Property> listProperties() {
         List<Model.Property> properties = new ArrayList<Model.Property>();
         Set<Field> fields = new LinkedHashSet<Field>();
-        Class<?> tclazz = clazz;
+        Class<?> tclazz = this.clazz;
         while (!tclazz.equals(Object.class)) {
             Collections.addAll(fields, tclazz.getDeclaredFields());
             tclazz = tclazz.getSuperclass();
@@ -217,29 +204,30 @@ public class JPAModelLoader implements Model.Factory {
     }
 
     private Class<?> getCompositeKeyClass() {
-        Class<?> tclazz = clazz;
+        Class<?> tclazz = this.clazz;
         while (!tclazz.equals(Object.class)) {
             // Only consider mapped types
-            if (tclazz.isAnnotationPresent(Entity.class)
-                    || tclazz.isAnnotationPresent(MappedSuperclass.class)) {
+            if (tclazz.isAnnotationPresent(Entity.class) || tclazz.isAnnotationPresent(MappedSuperclass.class)) {
                 IdClass idClass = tclazz.getAnnotation(IdClass.class);
                 if (idClass != null)
                     return idClass.value();
             }
             tclazz = tclazz.getSuperclass();
         }
-        throw new UnexpectedException("Invalid mapping for class " + clazz + ": multiple IDs with no @IdClass annotation");
+        throw new UnexpectedException("Invalid mapping for class " + clazz
+                + ": multiple IDs with no @IdClass annotation");
     }
 
     /**
-     * 
-     */
+ * 
+ */
     private void initProperties() {
         synchronized (this) {
-            if (properties != null)
+            if (this.properties != null){
                 return;
-            properties = new HashMap<String, Model.Property>();
-            Set<Field> fields = getModelFields(clazz);
+            }
+            this.properties = new HashMap<String, Model.Property>();
+            Set<Field> fields = getModelFields(this.clazz);
             for (Field f : fields) {
                 int mod = f.getModifiers();
                 if (Modifier.isTransient(mod) || Modifier.isStatic(mod)) {
@@ -261,8 +249,9 @@ public class JPAModelLoader implements Model.Factory {
         Class<?> idClass = getCompositeKeyClass();
         Object id = idClass.newInstance();
         PropertyDescriptor[] idProperties = PropertyUtils.getPropertyDescriptors(idClass);
-        if (idProperties == null || idProperties.length == 0)
+        if (idProperties == null || idProperties.length == 0){
             throw new UnexpectedException("Composite id has no properties: " + idClass.getName());
+        }
         for (PropertyDescriptor idProperty : idProperties) {
             // do we have a field for this?
             String idPropertyName = idProperty.getName();
@@ -271,14 +260,16 @@ public class JPAModelLoader implements Model.Factory {
                 continue;
             Model.Property modelProperty = this.properties.get(idPropertyName);
             if (modelProperty == null)
-                throw new UnexpectedException("Composite id property missing: " + clazz.getName() + "." + idPropertyName
-                        + " (defined in IdClass " + idClass.getName() + ")");
+                throw new UnexpectedException("Composite id property missing: " + clazz.getName() + "."
+                        + idPropertyName + " (defined in IdClass " + idClass.getName() + ")");
             // sanity check
             Object value = modelProperty.field.get(model);
 
             if (modelProperty.isMultiple)
-                throw new UnexpectedException("Composite id property cannot be multiple: " + clazz.getName() + "." + idPropertyName);
-            // now is this property a relation? if yes then we must use its ID in the key (as per specs)
+                throw new UnexpectedException("Composite id property cannot be multiple: " + clazz.getName() + "."
+                        + idPropertyName);
+            // now is this property a relation? if yes then we must use its ID
+            // in the key (as per specs)
             if (modelProperty.isRelation) {
                 // get its id
                 if (!Model.class.isAssignableFrom(modelProperty.type))
@@ -346,8 +337,7 @@ public class JPAModelLoader implements Model.Factory {
         Class<?> tclazz = clazz;
         while (!tclazz.equals(Object.class)) {
             // Only add fields for mapped types
-            if (tclazz.isAnnotationPresent(Entity.class)
-                    || tclazz.isAnnotationPresent(MappedSuperclass.class))
+            if (tclazz.isAnnotationPresent(Entity.class) || tclazz.isAnnotationPresent(MappedSuperclass.class))
                 Collections.addAll(fields, tclazz.getDeclaredFields());
             tclazz = tclazz.getSuperclass();
         }
@@ -359,7 +349,7 @@ public class JPAModelLoader implements Model.Factory {
      * @return
      */
     Field keyField() {
-        Class c = clazz;
+        Class<?> c = this.clazz;
         try {
             while (!c.equals(Object.class)) {
                 for (Field field : c.getDeclaredFields()) {
@@ -381,7 +371,7 @@ public class JPAModelLoader implements Model.Factory {
      * @return
      */
     Field[] keyFields() {
-        Class c = clazz;
+        Class<?> c = this.clazz;
         try {
             List<Field> fields = new ArrayList<Field>();
             while (!c.equals(Object.class)) {
@@ -409,16 +399,17 @@ public class JPAModelLoader implements Model.Factory {
      * @return
      */
     String getSearchQuery(List<String> searchFields) {
-        String q = "";
-        for (Model.Property property : listProperties()) {
-            if (property.isSearchable && (searchFields == null || searchFields.isEmpty() ? true : searchFields.contains(property.name))) {
-                if (!q.equals("")) {
-                    q += " or ";
+        StringBuilder q = new StringBuilder("");
+        for (Model.Property property : this.listProperties()) {
+            if (property.isSearchable
+                    && (searchFields == null || searchFields.isEmpty() ? true : searchFields.contains(property.name))) {
+                if (q.length() > 0) {
+                    q.append(" or ");
                 }
-                q += "lower(" + property.name + ") like ?1";
+                q.append("lower(").append(property.name).append(") like ?1");
             }
         }
-        return q;
+        return q.toString();
     }
 
     /**
@@ -430,16 +421,17 @@ public class JPAModelLoader implements Model.Factory {
         Model.Property modelProperty = new Model.Property();
         modelProperty.type = field.getType();
         modelProperty.field = field;
+
         if (Model.class.isAssignableFrom(field.getType())) {
             if (field.isAnnotationPresent(OneToOne.class)) {
                 if (field.getAnnotation(OneToOne.class).mappedBy().equals("")) {
                     modelProperty.isRelation = true;
                     modelProperty.relationType = field.getType();
+                    final String modelDbName = JPA.getDBName(modelProperty.relationType);
                     modelProperty.choices = new Model.Choices() {
-
                         @SuppressWarnings("unchecked")
                         public List<Object> list() {
-                            return getJPAContext().em().createQuery("from " + field.getType().getName()).getResultList();
+                            return JPA.em(modelDbName).createQuery("from " + field.getType().getName()).getResultList();
                         }
                     };
                 }
@@ -447,11 +439,11 @@ public class JPAModelLoader implements Model.Factory {
             if (field.isAnnotationPresent(ManyToOne.class)) {
                 modelProperty.isRelation = true;
                 modelProperty.relationType = field.getType();
+                final String modelDbName = JPA.getDBName(modelProperty.relationType);
                 modelProperty.choices = new Model.Choices() {
-
                     @SuppressWarnings("unchecked")
                     public List<Object> list() {
-                        return getJPAContext().em().createQuery("from " + field.getType().getName()).getResultList();
+                        return JPA.em(modelDbName).createQuery("from " + field.getType().getName()).getResultList();
                     }
                 };
             }
@@ -463,11 +455,11 @@ public class JPAModelLoader implements Model.Factory {
                     modelProperty.isRelation = true;
                     modelProperty.isMultiple = true;
                     modelProperty.relationType = fieldType;
+                    final String modelDbName = JPA.getDBName(modelProperty.relationType);
                     modelProperty.choices = new Model.Choices() {
-
                         @SuppressWarnings("unchecked")
                         public List<Object> list() {
-                            return getJPAContext().em().createQuery("from " + fieldType.getName()).getResultList();
+                            return JPA.em(modelDbName).createQuery("from " + fieldType.getName()).getResultList();
                         }
                     };
                 }
@@ -477,11 +469,12 @@ public class JPAModelLoader implements Model.Factory {
                     modelProperty.isRelation = true;
                     modelProperty.isMultiple = true;
                     modelProperty.relationType = fieldType;
+                    final String modelDbName = JPA.getDBName(field.getType());
                     modelProperty.choices = new Model.Choices() {
 
                         @SuppressWarnings("unchecked")
                         public List<Object> list() {
-                            return getJPAContext().em().createQuery("from " + fieldType.getName()).getResultList();
+                            return JPA.em(modelDbName).createQuery("from " + fieldType.getName()).getResultList();
                         }
                     };
                 }
@@ -505,7 +498,8 @@ public class JPAModelLoader implements Model.Factory {
         }
         if (field.isAnnotationPresent(Id.class) || field.isAnnotationPresent(EmbeddedId.class)) {
             // Look if the target is an embeddable class
-            if (field.getType().isAnnotationPresent(Embeddable.class) || field.getType().isAnnotationPresent(IdClass.class)) {
+            if (field.getType().isAnnotationPresent(Embeddable.class)
+                    || field.getType().isAnnotationPresent(IdClass.class)) {
                 modelProperty.isRelation = true;
                 modelProperty.relationType = field.getType();
             }

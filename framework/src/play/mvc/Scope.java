@@ -1,8 +1,6 @@
 package play.mvc;
 
-import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
-import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -16,6 +14,7 @@ import play.data.binding.Binder;
 import play.data.binding.ParamNode;
 import play.data.binding.RootParamNode;
 import play.data.parsing.DataParser;
+import play.data.parsing.DataParsers;
 import play.data.parsing.TextParser;
 import play.data.validation.Validation;
 import play.exceptions.UnexpectedException;
@@ -364,14 +363,9 @@ public class Scope {
                 } else {
                     String contentType = request.contentType;
                     if (contentType != null) {
-                        DataParser dataParser = DataParser.parsers
-                                .get(contentType);
+                        DataParser dataParser = DataParsers.forContentType(contentType);
                         if (dataParser != null) {
                             _mergeWith(dataParser.parse(request.body));
-                        } else {
-                            if (contentType.startsWith("text/")) {
-                                _mergeWith(new TextParser().parse(request.body));
-                            }
                         }
                     }
                     try {
@@ -431,6 +425,7 @@ public class Scope {
         @SuppressWarnings("unchecked")
         public <T> T get(String key, Class<T> type) {
             try {
+                checkAndParse();
                 // TODO: This is used by the test, but this is not the most convenient.
                 return (T) Binder.bind(getRootParamNode(), key, type, type, null);
             } catch (Exception e) {

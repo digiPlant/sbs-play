@@ -1,47 +1,54 @@
 package play.db.jpa;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.log4j.Level;
 import org.hibernate.ejb.Ejb3Configuration;
+
 import play.Logger;
 import play.Play;
 import play.PlayPlugin;
 import play.classloading.ApplicationClasses.ApplicationClass;
 import play.data.binding.Binder;
+import play.data.binding.NoBinding;
 import play.data.binding.ParamNode;
 import play.data.binding.RootParamNode;
 import play.db.DB;
-import play.db.DBConfig;
 import play.db.Model;
+import play.db.Configuration;
 import play.exceptions.JPAException;
 import play.exceptions.UnexpectedException;
-import play.utils.Utils;
 
-import javax.persistence.Entity;
-import javax.persistence.EntityManager;
-import javax.persistence.NoResultException;
-import javax.persistence.PersistenceException;
-import javax.persistence.Query;
+import javax.persistence.*;
+
+import java.beans.PropertyDescriptor;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
 import java.util.*;
+
+
 
 /**
  * JPA Plugin
  */
 public class JPAPlugin extends PlayPlugin {
 
+
     public static boolean autoTxs = true;
 
+  
     @Override
     public Object bind(RootParamNode rootParamNode, String name, Class clazz, java.lang.reflect.Type type, Annotation[] annotations) {
         // TODO need to be more generic in order to work with JPASupport
-    	if(clazz.isAnnotationPresent(Entity.class)) {
+        if (JPABase.class.isAssignableFrom(clazz)) {
 
             ParamNode paramNode = rootParamNode.getChild(name, true);
 
             String[] keyNames = new JPAModelLoader(clazz).keyNames();
             ParamNode[] ids = new ParamNode[keyNames.length];
+            
+            String dbName = JPA.getDBName(clazz);
             // Collect the matching ids
             int i = 0;
             for (String keyName : keyNames) {
@@ -49,7 +56,7 @@ public class JPAPlugin extends PlayPlugin {
             }
             if (ids != null && ids.length > 0) {
                 try {
-                    EntityManager em = JPABase.getJPAConfig(clazz).getJPAContext().em();
+                    EntityManager em = JPA.em(dbName);
                     StringBuilder q = new StringBuilder().append("from ").append(clazz.getName()).append(" o where");
                     int keyIdx = 1;
                     for (String keyName : keyNames) {
@@ -60,7 +67,7 @@ public class JPAPlugin extends PlayPlugin {
                     }
                     Query query = em.createQuery(q.toString());
                     // The primary key can be a composite.
-                    Class[] pk = new JPAModelLoader(clazz).keyTypes();
+                    Class<?>[] pk = new JPAModelLoader(clazz).keyTypes();
                     int j = 0;
                     for (ParamNode id : ids) {
                         if (id.getValues() == null || id.getValues().length == 0 || id.getFirstValue(null)== null || id.getFirstValue(null).trim().length() <= 0 ) {
@@ -95,188 +102,120 @@ public class JPAPlugin extends PlayPlugin {
     public void enhance(ApplicationClass applicationClass) throws Exception {
         new JPAEnhancer().enhanceThisClass(applicationClass);
     }
-
-
-    /**
-     * returns empty string if default config.
-     * returns descriptive string about config name if not default config
-     */
-    protected String getConfigInfoString(String configName) {
-        if (DBConfig.defaultDbConfigName.equals(configName)) {
-            return "";
-        } else {
-            return " (jpa config name: " + configName + ")";
-        }
-    }
-
-
-    @Override
-    public void onApplicationStart() {
-
-        // must check and configure JPA for each DBConfig
-        for (DBConfig dbConfig : DB.getDBConfigs()) {
-            // check and enable JPA on this config
-
-            // is JPA already configured?
-            String configName = dbConfig.getDBConfigName();
-
-            if (JPA.getJPAConfig(configName, true) == null) {
-                //must configure it
-
-                // resolve prefix for hibernate config..
-                // should be nothing for default, and db_<name> for others
-                String propPrefix = "";
-                if (!DBConfig.defaultDbConfigName.equalsIgnoreCase(configName)) {
-                    propPrefix = "db_" + configName + ".";
-                }
-                List<Class> classes = findEntityClassesForThisConfig(configName, propPrefix);
-                if (classes == null) continue;
-
-                // we're ready to configure this instance of JPA
-                final String hibernateDataSource = Play.configuration.getProperty(propPrefix + "hibernate.connection.datasource");
-
-                if (StringUtils.isEmpty(hibernateDataSource) && dbConfig == null) {
-                    throw new JPAException("Cannot start a JPA manager without a properly configured database" + getConfigInfoString(configName),
-                            new NullPointerException("No datasource configured"));
-                }
-
-                Ejb3Configuration cfg = new Ejb3Configuration();
-
-                if (dbConfig.getDatasource() != null) {
-                    cfg.setDataSource(dbConfig.getDatasource());
-                }
-
-                if (!Play.configuration.getProperty(propPrefix + "jpa.ddl", Play.mode.isDev() ? "update" : "none").equals("none")) {
-                    cfg.setProperty("hibernate.hbm2ddl.auto", Play.configuration.getProperty(propPrefix + "jpa.ddl", "update"));
-                }
-
-                String driver = null;
-                if (StringUtils.isEmpty(propPrefix)) {
-                    driver = Play.configuration.getProperty("db.driver");
-                } else {
-                    driver = Play.configuration.getProperty(propPrefix + "driver");
-                }
-                cfg.setProperty("hibernate.dialect", getDefaultDialect(propPrefix, driver));
-                cfg.setProperty("javax.persistence.transaction", "RESOURCE_LOCAL");
-
-
-                cfg.setInterceptor(new HibernateInterceptor());
-
-                // This setting is global for all JPAs - only configure if configuring default JPA
-                if (StringUtils.isEmpty(propPrefix)) {
-                    if (Play.configuration.getProperty(propPrefix + "jpa.debugSQL", "false").equals("true")) {
-                        org.apache.log4j.Logger.getLogger("org.hibernate.SQL").setLevel(Level.ALL);
-                    } else {
-                        org.apache.log4j.Logger.getLogger("org.hibernate.SQL").setLevel(Level.OFF);
-                    }
-                }
-                // inject additional  hibernate.* settings declared in Play! configuration
-                Properties additionalProperties = (Properties) Utils.Maps.filterMap(Play.configuration, "^" + propPrefix + "hibernate\\..*");
-                // We must remove prefix from names
-                Properties transformedAdditionalProperties = new Properties();
-                for (Map.Entry<Object, Object> entry : additionalProperties.entrySet()) {
-                    Object key = entry.getKey();
-                    if (!StringUtils.isEmpty(propPrefix)) {
-                        key = ((String) key).substring(propPrefix.length()); // chop off the prefix
-                    }
-                    transformedAdditionalProperties.put(key, entry.getValue());
-                }
-                cfg.addProperties(transformedAdditionalProperties);
-
-
-                try {
-                    // nice hacking :) I like it..
-                    Field field = cfg.getClass().getDeclaredField("overridenClassLoader");
-                    field.setAccessible(true);
-                    field.set(cfg, Play.classloader);
-                } catch (Exception e) {
-                    Logger.error(e, "Error trying to override the hibernate classLoader (new hibernate version ???)");
-                }
-
-                for (Class<?> clazz : classes) {
-                    cfg.addAnnotatedClass(clazz);
-                    if (Logger.isTraceEnabled()) {
-                        Logger.trace("JPA Model : %s", clazz);
-                    }
-                }
-                String[] moreEntities = Play.configuration.getProperty(propPrefix + "jpa.entities", "").split(", ");
-                for (String entity : moreEntities) {
-                    if (entity.trim().equals("")) {
-                        continue;
-                    }
-                    try {
-                        cfg.addAnnotatedClass(Play.classloader.loadClass(entity));
-                    } catch (Exception e) {
-                        Logger.warn("JPA -> Entity not found: %s", entity);
-                    }
-                }
-
-                for (ApplicationClass applicationClass : Play.classes.all()) {
-                    if (applicationClass.isClass() || applicationClass.javaPackage == null) {
-                        continue;
-                    }
-                    Package p = applicationClass.javaPackage;
-                    Logger.info("JPA -> Adding package: %s", p.getName());
-                    cfg.addPackage(p.getName());
-                }
-
-                String mappingFile = Play.configuration.getProperty(propPrefix + "jpa.mapping-file", "");
-                if (mappingFile != null && mappingFile.length() > 0) {
-                    cfg.addResource(mappingFile);
-                }
-
-                if (Logger.isTraceEnabled()) {
-                    Logger.trace("Initializing JPA" + getConfigInfoString(configName) + " ...");
-                }
-
-                try {
-                    JPA.addConfiguration(configName, cfg);
-                } catch (PersistenceException e) {
-                    throw new JPAException(e.getMessage() + getConfigInfoString(configName), e.getCause() != null ? e.getCause() : e);
-                }
-
-            }
-
-        }
-
-        // must look for Entity-objects referring to none-existing JPAConfig
-        List<Class> allEntityClasses = Play.classloader.getAnnotatedClasses(Entity.class);
-        for (Class clazz : allEntityClasses) {
-            String configName = Entity2JPAConfigResolver.getJPAConfigNameForEntityClass(clazz);
-            if (JPA.getJPAConfig(configName, true) == null) {
-                throw new JPAException("Found Entity-class (" + clazz.getName() + ") referring to none-existing JPAConfig" + getConfigInfoString(configName) + ". " +
-                        "Is JPA properly configured?");
-            }
-        }
-    }
-
-    private List<Class> findEntityClassesForThisConfig(String configName, String propPrefix) {
-        //look and see if we have any Entity-objects for this db config
-        List<Class> classes = Play.classloader.getAnnotatedClasses(Entity.class);
-
-        // filter list on Entities meant for us..
-        List<Class> filteredClasses = new ArrayList<Class>(classes.size());
-        for (Class clazz : classes) {
-            if (configName.equals(Entity2JPAConfigResolver.getJPAConfigNameForEntityClass(clazz))) {
-                filteredClasses.add(clazz);
-            }
-        }
-
-
-        if (!Play.configuration.getProperty(propPrefix + "jpa.entities", "").equals("")) {
-            return filteredClasses;
-        }
-
-        if (filteredClasses.isEmpty()) {
+     
+    public EntityManager em(String key) {
+        EntityManagerFactory emf = JPA.emfs.get(key);
+        if(emf == null) {
             return null;
         }
-
-        return filteredClasses;
+        return emf.createEntityManager();
     }
 
+    /**
+     * Reads the configuration file and initialises required JPA EntityManagerFactories.
+     */
+    @Override
+    public void onApplicationStart() {  
+        org.hibernate.ejb.HibernatePersistence persistence = new org.hibernate.ejb.HibernatePersistence();
+        org.apache.log4j.Logger.getLogger("org.hibernate.SQL").setLevel(Level.OFF);
 
-    public static String getDefaultDialect(String propPrefix, String driver) {
-        String dialect = Play.configuration.getProperty(propPrefix + "jpa.dialect");
+        Set<String> dBNames = Configuration.getDbNames();
+        for (String dbName : dBNames) {
+            Configuration dbConfig = new Configuration(dbName);
+            
+            Ejb3Configuration cfg = new Ejb3Configuration();
+            List<Class> classes = Play.classloader.getAnnotatedClasses(Entity.class);
+            for (Class<?> clazz : classes) {
+                if (clazz.isAnnotationPresent(Entity.class)) {
+                    // Do we have a transactional annotation matching our dbname?
+                    PersistenceUnit pu = clazz.getAnnotation(PersistenceUnit.class);
+                    if (pu != null && pu.name().equals(dbName)) {
+                      cfg.addAnnotatedClass(clazz);
+                      Logger.debug("Add JPA Model : %s to db %s", clazz, dbName);
+                    } else if (pu == null && JPA.DEFAULT.equals(dbName)) {
+                      cfg.addAnnotatedClass(clazz);
+                      Logger.debug("Add JPA Model : %s to db %s", clazz, dbName);
+                    }                    
+                }
+            }
+            
+            // Add entities
+            String[] moreEntities = Play.configuration.getProperty("jpa.entities", "").split(", ");
+            for (String entity : moreEntities) {
+                if (entity.trim().equals("")) {
+                    continue;
+                }
+                try {
+                    Class<?> clazz = Play.classloader.loadClass(entity);  
+                    // Do we have a transactional annotation matching our dbname?
+                    PersistenceUnit pu = clazz.getAnnotation(PersistenceUnit.class);
+                    if (pu != null && pu.name().equals(dbName)) {
+                      cfg.addAnnotatedClass(clazz);
+                      Logger.debug("Add JPA Model : %s to db %s", clazz, dbName);
+                    } else if (pu == null && JPA.DEFAULT.equals(dbName)) {
+                      cfg.addAnnotatedClass(clazz);
+                      Logger.debug("Add JPA Model : %s to db %s", clazz, dbName);
+                    }         
+                } catch (Exception e) {
+                    Logger.warn("JPA -> Entity not found: %s", entity);
+                }
+            }
+            
+            for (ApplicationClass applicationClass : Play.classes.all()) {
+                if (applicationClass.isClass() || applicationClass.javaPackage == null) {
+                    continue;
+                }
+                Package p = applicationClass.javaPackage;
+                Logger.info("JPA -> Adding package: %s", p.getName());
+                cfg.addPackage(p.getName());
+            }
+
+            String mappingFile = dbConfig.getProperty("jpa.mapping-file", "");
+            if (mappingFile != null && mappingFile.length() > 0) {
+                cfg.addResource(mappingFile);
+            }
+
+            if (!dbConfig.getProperty("jpa.ddl", Play.mode.isDev() ? "update" : "none").equals("none")) {
+                cfg.setProperty("hibernate.hbm2ddl.auto", dbConfig.getProperty("jpa.ddl", "update"));
+            }
+          
+            Map<String, String> properties = dbConfig.getProperties();
+            properties.put("javax.persistence.transaction", "RESOURCE_LOCAL");
+            properties.put("javax.persistence.provider", "org.hibernate.ejb.HibernatePersistence");
+            properties.put("hibernate.dialect", getDefaultDialect(dbConfig, dbConfig.getProperty("db.driver")));
+            
+            if (dbConfig.getProperty("jpa.debugSQL", "false").equals("true")) {
+                org.apache.log4j.Logger.getLogger("org.hibernate.SQL").setLevel(Level.ALL);
+            }
+
+            cfg.configure(properties);
+            cfg.setDataSource(DB.getDataSource(dbName));
+          
+            try {
+                Field field = cfg.getClass().getDeclaredField("overridenClassLoader");
+                field.setAccessible(true);
+                field.set(cfg, Play.classloader);
+            } catch (Exception e) {
+                Logger.error(e, "Error trying to override the hibernate classLoader (new hibernate version ???)");
+            }
+            
+            cfg.setInterceptor(new HibernateInterceptor());
+
+            if (Logger.isTraceEnabled()) {
+                Logger.trace("Initializing JPA for %s...", dbName);
+            }
+
+            JPA.emfs.put(dbName, cfg.buildEntityManagerFactory());
+        }
+        JPQL.instance = new JPQL();
+    }
+
+    public static String getDefaultDialect(String driver) {
+        return getDefaultDialect(new Configuration("default"), driver);
+    }
+
+    public static String getDefaultDialect(Configuration dbConfig, String driver) {
+        String dialect = dbConfig.getProperty("jpa.dialect");
         if (dialect != null) {
             return dialect;
         } else if ("org.h2.Driver".equals(driver)) {
@@ -325,60 +264,123 @@ public class JPAPlugin extends PlayPlugin {
 
     @Override
     public void onApplicationStop() {
-        JPA.close();
+        // Close all presistence units
+        for(EntityManagerFactory emf: JPA.emfs.values()) {
+            if(emf.isOpen()){
+                emf.close();
+            }
+        }
+        JPA.emfs.clear();    
     }
-
+  
     @Override
-    public void beforeInvocation() {
-        // just to be safe we must clear all possible previous
-        // JPAContexts in this thread
-        JPA.clearJPAContext();
-    }
-
+    public void afterFixtureLoad() {
+        if (JPA.isEnabled()) {
+            for(String emfKey: JPA.emfs.keySet()) {
+                JPA.em(emfKey).clear();
+            }
+        }
+    } 
+   
     @Override
     public void afterInvocation() {
-        closeTx(false);
+       // In case the current Action got suspended
+       for(String emfKey: JPA.emfs.keySet()) {
+           JPA.closeTx(emfKey);
+       }
     }
 
-    @Override
-    public void onInvocationException(Throwable e) {
-        closeTx(true);
+    public class TransactionalFilter extends Filter<Object> {
+      public TransactionalFilter(String name) {
+        super(name);
+      }
+      @Override
+      public Object withinFilter(play.libs.F.Function0<Object> fct) throws Throwable {
+        return JPA.withinFilter(fct);
+      }
     }
 
+    private TransactionalFilter txFilter = new TransactionalFilter("TransactionalFilter");
+
     @Override
-    public void invocationFinally() {
-        closeTx(true);
+    public Filter getFilter() {
+      return txFilter;
     }
+
+    public static EntityManager createEntityManager() {
+      return JPA.createEntityManager(JPA.DEFAULT);
+    }
+
 
     /**
      * initialize the JPA context and starts a JPA transaction
-     * if not already started.
-     * <p/>
-     * This method is not needed since transaction is created
-     * automatically on first use.
-     * <p/>
-     * It is better to specify readonly like this: @Transactional(readOnly=true)
      *
      * @param readonly true for a readonly transaction
-     * @deprecated use @Transactional with readOnly-property instead
+     * @param autoCommit true to automatically commit the DB transaction after each JPA statement
+     * @deprecated see JPA startTx() method
      */
     @Deprecated
     public static void startTx(boolean readonly) {
-        // Create new transaction by getting the JPAContext
-        JPA.getJPAConfig(DBConfig.defaultDbConfigName).getJPAContext(readonly);
+        if (!JPA.isEnabled()) {
+             return;
+        }
+        EntityManager manager = JPA.createEntityManager();
+        manager.setFlushMode(FlushModeType.COMMIT);
+        manager.setProperty("org.hibernate.readOnly", readonly);
+        if (autoTxs) {
+            manager.getTransaction().begin();
+        }
+        JPA.createContext(JPA.DEFAULT, manager, readonly);
     }
 
+   
     /**
-     * clear current JPA context and transaction if JPAPlugin.autoTxs is true
-     * When using multiple databases in the same request this method
-     * tries to commit/rollback as many transactions as possible,
-     * but there is not guaranteed that all transactions are committed.
-     *
+     * clear current JPA context and transaction 
      * @param rollback shall current transaction be committed (false) or cancelled (true)
+     * @deprecated see {@link JPA#rollbackTx} and {@link JPA#closeTx} method
      */
+    @Deprecated
     public static void closeTx(boolean rollback) {
-        if (autoTxs) {
-            JPA.closeTx(rollback);
+        if (!JPA.isEnabled() || JPA.currentEntityManager.get() == null || JPA.currentEntityManager.get().get(JPA.DEFAULT) == null || JPA.currentEntityManager.get().get(JPA.DEFAULT).entityManager == null) {
+            return;
+        }
+        EntityManager manager = JPA.currentEntityManager.get().get(JPA.DEFAULT).entityManager;
+        try {
+            if (autoTxs) {
+                // Be sure to set the connection is non-autoCommit mode as some driver will complain about COMMIT statement
+                try {
+                    DB.getConnection(JPA.DEFAULT).setAutoCommit(false);
+                } catch(Exception e) {
+                    Logger.error(e, "Why the driver complains here?");
+                }
+                // Commit the transaction
+                if (manager.getTransaction().isActive()) {
+                    if (JPA.get(JPA.DEFAULT).readonly || rollback || manager.getTransaction().getRollbackOnly()) {
+                        manager.getTransaction().rollback();
+                    } else {
+                        try {
+                            if (autoTxs) {
+                                manager.getTransaction().commit();
+                            }
+                        } catch (Throwable e) {
+                            for (int i = 0; i < 10; i++) {
+                                if (e instanceof PersistenceException && e.getCause() != null) {
+                                    e = e.getCause();
+                                    break;
+                                }
+                                e = e.getCause();
+                                if (e == null) {
+                                    break;
+                                }
+                            }
+                            throw new JPAException("Cannot commit", e);
+                        }
+                    }
+                }
+            }
+        } finally {
+            manager.close();
+            JPA.clearContext(JPA.DEFAULT);
         }
     }
 
@@ -388,14 +390,5 @@ public class JPAPlugin extends PlayPlugin {
             return new JPAModelLoader(modelClass);
         }
         return null;
-    }
-
-    @Override
-    public void afterFixtureLoad() {
-        JPA.clear();
-    }
-
-    
-
-    
+    }  
 }

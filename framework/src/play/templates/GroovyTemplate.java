@@ -5,7 +5,6 @@ import com.jamonapi.MonitorFactory;
 import groovy.lang.*;
 import org.apache.commons.io.FileUtils;
 import org.codehaus.groovy.control.*;
-import org.apache.commons.lang.StringEscapeUtils;
 import org.codehaus.groovy.control.CompilationUnit.GroovyClassOperation;
 import org.codehaus.groovy.control.messages.ExceptionMessage;
 import org.codehaus.groovy.control.messages.Message;
@@ -17,7 +16,7 @@ import play.Logger;
 import play.Play;
 import play.Play.Mode;
 import play.classloading.BytecodeCache;
-import play.classloading.enhancers.LVEnhancer;
+import play.classloading.enhancers.LocalvariablesNamesEnhancer.LocalVariablesNamesTracer;
 import play.data.binding.Unbinder;
 import play.exceptions.*;
 import play.exceptions.TemplateExecutionException.DoBodyException;
@@ -135,7 +134,7 @@ public class GroovyTemplate extends BaseTemplate {
                     }
                 });
                 compilationUnit.compile();
-                // ouf
+                // ouf 
 
                 // Define script classes
                 StringBuilder sb = new StringBuilder();
@@ -362,7 +361,7 @@ public class GroovyTemplate extends BaseTemplate {
                 extension = template.name.substring(index + 1);
             }
         }
-
+        
         @Override
         public Object getProperty(String property) {
             try {
@@ -462,10 +461,9 @@ public class GroovyTemplate extends BaseTemplate {
 
         public String __getMessage(Object[] val) {
             if (val==null) {
-                /*throw new NullPointerException("You are trying to resolve a message with an expression " +
+                throw new NullPointerException("You are trying to resolve a message with an expression " +
                         "that is resolved to null - " +
-                        "have you forgotten quotes around the message-key?");*/
-                return "";
+                        "have you forgotten quotes around the message-key?");
             }
             if (val.length == 1) {
                 return Messages.get(val[0]);
@@ -495,7 +493,7 @@ public class GroovyTemplate extends BaseTemplate {
             if (val instanceof RawData) {
                 return ((RawData) val).data;
             }
-            if (!template.name.endsWith(".html") || TagContext.hasParentTag("verbatim") || !Play.configuration.getProperty("future.escapeInTemplates", "false").equals("true")) {
+            if (!template.name.endsWith(".html") || TagContext.hasParentTag("verbatim")) {
                 return stringValue;
             }
             return HTML.htmlEscape(stringValue);
@@ -545,7 +543,7 @@ public class GroovyTemplate extends BaseTemplate {
                     try {
                         Map<String, Object> r = new HashMap<String, Object>();
                         Method actionMethod = (Method) ActionInvoker.getActionMethod(action)[1];
-                        String[] names = (String[]) actionMethod.getDeclaringClass().getDeclaredField("$" + actionMethod.getName() + LVEnhancer.computeMethodHash(actionMethod.getParameterTypes())).get(null);
+                        String[] names = (String[]) actionMethod.getDeclaringClass().getDeclaredField("$" + actionMethod.getName() + LocalVariablesNamesTracer.computeMethodHash(actionMethod.getParameterTypes())).get(null);
                         if (param instanceof Object[]) {
                             if(((Object[])param).length == 1 && ((Object[])param)[0] instanceof Map) {
                                 r = (Map<String,Object>)((Object[])param)[0];

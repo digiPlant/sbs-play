@@ -1,8 +1,6 @@
 package play.libs;
 
-import play.Logger;
-import play.Play;
-import play.PlayPlugin;
+import play.*;
 import play.mvc.Http;
 
 import java.io.InputStream;

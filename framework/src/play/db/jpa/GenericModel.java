@@ -9,7 +9,6 @@ import javax.persistence.*;
 import org.apache.commons.lang.StringUtils;
 
 import play.Play;
-import play.classloading.enhancers.LVEnhancer;
 import play.data.binding.BeanWrapper;
 import play.data.binding.Binder;
 import play.data.binding.BindingAnnotations;
@@ -21,9 +20,8 @@ import play.mvc.Scope.Params;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 
-
 /**
- * A super class for JPA entities
+ * A super class for JPA entities 
  */
 @MappedSuperclass
 @SuppressWarnings("unchecked")
@@ -35,17 +33,17 @@ public class GenericModel extends JPABase {
      *  public static <T extends JPABase> T create(ParamNode rootParamNode, String name, Class<?> type, Annotation[] annotations)
      */
     @Deprecated
-    public static Object create(Class<?> type, String name, Map<String, String[]> params, Annotation[] annotations) {
+    public static <T extends JPABase> T create(Class<?> type, String name, Map<String, String[]> params, Annotation[] annotations) {
         ParamNode rootParamNode = ParamNode.convert(params);
-        return create(rootParamNode, name, type, annotations);
+        return (T)create(rootParamNode, name, type, annotations);
     }
 
-    public static Object create(ParamNode rootParamNode, String name, Class<?> type, Annotation[] annotations) {
+    public static <T extends JPABase> T create(ParamNode rootParamNode, String name, Class<?> type, Annotation[] annotations) {
         try {
             Constructor c = type.getDeclaredConstructor();
             c.setAccessible(true);
             Object model = c.newInstance();
-            return edit(rootParamNode, name, model, annotations);
+            return (T) edit(rootParamNode, name, model, annotations);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -61,13 +59,16 @@ public class GenericModel extends JPABase {
      * @return the entity
      */
     @Deprecated
-    public static Object edit(Object o, String name, Map<String, String[]> params, Annotation[] annotations) {
+    public static <T extends JPABase> T edit(Object o, String name, Map<String, String[]> params, Annotation[] annotations) {
         ParamNode rootParamNode = ParamNode.convert(params);
-        return edit( rootParamNode, name, o, annotations);
+        return (T)edit( rootParamNode, name, o, annotations);
     }
 
-    @SuppressWarnings("deprecation")
-    public static Object edit(ParamNode rootParamNode, String name, Object o, Annotation[] annotations) {
+    public static <T extends JPABase> T edit(ParamNode rootParamNode, String name, Object o, Annotation[] annotations) {
+        return edit(JPA.DEFAULT, rootParamNode, name, o, annotations);
+    }
+
+    public static <T extends JPABase> T edit(String dbName, ParamNode rootParamNode, String name, Object o, Annotation[] annotations) {
         // #1601 - If name is empty, we're dealing with "root" request parameters (without prefixes).
         // Must not call rootParamNode.getChild in that case, as it returns null. Use rootParamNode itself instead.
         ParamNode paramNode = StringUtils.isEmpty(name) ? rootParamNode : rootParamNode.getChild(name, true);
@@ -75,7 +76,7 @@ public class GenericModel extends JPABase {
         // returning from this method.
         List<ParamNode.RemovedNode> removedNodesList = new ArrayList<ParamNode.RemovedNode>();
         try {
-            BeanWrapper bw = BeanWrapper.forClass(o.getClass());
+            BeanWrapper bw = new BeanWrapper(o.getClass());
             // Start with relations
             Set<Field> fields = new HashSet<Field>();
             Class<?> clazz = o.getClass();
@@ -114,7 +115,6 @@ public class GenericModel extends JPABase {
                     Class<Model> c = (Class<Model>) Play.classloader.loadClass(relation);
                     if (JPABase.class.isAssignableFrom(c)) {
                         String keyName = Model.Manager.factoryFor(c).keyName();
-                        EntityManager em = JPABase.getJPAConfig(c).getJPAContext().em();
                         if (multiple && Collection.class.isAssignableFrom(field.getType())) {
                             Collection l = new ArrayList();
                             if (SortedSet.class.isAssignableFrom(field.getType())) {
@@ -130,7 +130,8 @@ public class GenericModel extends JPABase {
                                     if (_id == null || _id.equals("")) {
                                         continue;
                                     }
-                                    Query q = em.createQuery("from " + relation + " where " + keyName + " = ?1");
+                                 
+                                    Query q = JPA.em(dbName).createQuery("from " + relation + " where " + keyName + " = ?1");
                                     q.setParameter(1, Binder.directBind(rootParamNode.getOriginalKey(), annotations,_id, Model.Manager.factoryFor((Class<Model>) Play.classloader.loadClass(relation)).keyType(), null));
                                     try {
                                         l.add(q.getSingleResult());
@@ -145,7 +146,7 @@ public class GenericModel extends JPABase {
                             String[] ids = fieldParamNode.getChild(keyName, true).getValues();
                             if (ids != null && ids.length > 0 && !ids[0].equals("")) {
 
-                                Query q = em.createQuery("from " + relation + " where " + keyName + " = ?1");
+                                Query q = JPA.em(dbName).createQuery("from " + relation + " where " + keyName + " = ?1");
                                 q.setParameter(1, Binder.directBind(rootParamNode.getOriginalKey(), annotations, ids[0], Model.Manager.factoryFor((Class<Model>) Play.classloader.loadClass(relation)).keyType(), null));
                                 try {
                                     Object to = q.getSingleResult();
@@ -178,7 +179,7 @@ public class GenericModel extends JPABase {
             // Must not call rootParamNode.getChild in that case, as it returns null. Use rootParamNode itself instead.
             ParamNode beanNode = StringUtils.isEmpty(name) ? rootParamNode : rootParamNode.getChild(name, true);
             Binder.bindBean(beanNode, o, annotations);
-            return o;
+            return (T) o;
         } catch (Exception e) {
             throw new UnexpectedException(e);
         } finally {
@@ -203,8 +204,14 @@ public class GenericModel extends JPABase {
         return (T) this;
     }
 
+    public <T extends GenericModel> T edit(String dbName, ParamNode rootParamNode, String name) {
+        edit(dbName, rootParamNode, name, this, null);
+        return (T) this;
+    }
+    
+    
     public boolean validateAndSave() {
-        if (Validation.valid(LVEnhancer.LVEnhancerRuntime.getParamNames().subject, this).ok) {
+        if (Validation.current().valid(this).ok) {
             save();
             return true;
         }
@@ -230,7 +237,7 @@ public class GenericModel extends JPABase {
      * store (ie insert) the entity.
      */
     public boolean create() {
-        if (!em().contains(this)) {
+        if (!em(JPA.getDBName(this.getClass())).contains(this)) {
             _save();
             return true;
         }
@@ -241,7 +248,7 @@ public class GenericModel extends JPABase {
      * Refresh the entity state.
      */
     public <T extends JPABase> T refresh() {
-        em().refresh(this);
+        em(JPA.getDBName(this.getClass())).refresh(this);
         return (T) this;
     }
 
@@ -249,7 +256,7 @@ public class GenericModel extends JPABase {
      * Merge this object to obtain a managed entity (usefull when the object comes from the Cache).
      */
     public <T extends JPABase> T merge() {
-        return (T) em().merge(this);
+        return (T) em(JPA.getDBName(this.getClass())).merge(this);
     }
 
     /**

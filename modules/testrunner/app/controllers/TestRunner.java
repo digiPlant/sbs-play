@@ -67,7 +67,9 @@ public class TestRunner extends Controller {
     }
 
     public static void run(String test) throws Exception {
+          
         if (test.equals("init")) {
+           
             File testResults = Play.getFile("test-result");
             if (!testResults.exists()) {
                 testResults.mkdir();
@@ -77,14 +79,20 @@ public class TestRunner extends Controller {
                     Logger.warn("Cannot delete %s ...", tr.getAbsolutePath());
                 }
             }
+
+          
             renderText("done");
         }
         if (test.equals("end")) {
+
             File testResults = Play.getFile("test-result/result." + params.get("result"));
+          
             IO.writeContent(params.get("result"), testResults);
             renderText("done");
         }
         if (test.endsWith(".class")) {
+           
+            
             Play.getFile("test-result").mkdir();
             final String testname = test.substring(0, test.length() - 6);
             final TestEngine.TestResults results = await(new Job<TestEngine.TestResults>() {
@@ -93,6 +101,8 @@ public class TestRunner extends Controller {
                     return TestEngine.run(testname);
                 }
             }.now());
+           
+            
             response.status = results.passed ? 200 : 500;
             Template resultTemplate = TemplateLoader.load("TestRunner/results.html");
             Map<String, Object> options = new HashMap<String, Object>();
@@ -119,6 +129,7 @@ public class TestRunner extends Controller {
             render("TestRunner/selenium-suite.html", test);
         }
         if (test.endsWith(".test.html")) {
+
             File testFile = Play.getFile("test/" + test);
             if (!testFile.exists()) {
                 for(VirtualFile root : Play.roots) {
@@ -155,6 +166,7 @@ public class TestRunner extends Controller {
             response.status = 404;
             renderText("No test result");
         }
+       
     }
 
     public static void saveResult(String test, String result) throws Exception {

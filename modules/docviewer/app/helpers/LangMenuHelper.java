@@ -21,6 +21,7 @@ public class LangMenuHelper {
         defaultLangMenu.value = "English";
         langMenuList.add(defaultLangMenu);
         File[] dirs = baseDir.listFiles(new FileFilter() {
+            @Override
             public boolean accept(File file) {
                 return file.isDirectory() && ptn.matcher(file.getName()).find();
             }

@@ -17,7 +17,7 @@ import play.classloading.ApplicationClasses.ApplicationClass;
 import play.classloading.enhancers.ContinuationEnhancer;
 import play.classloading.enhancers.ControllersEnhancer;
 import play.classloading.enhancers.Enhancer;
-import play.classloading.enhancers.LVEnhancer;
+import play.classloading.enhancers.LocalvariablesNamesEnhancer;
 import play.classloading.enhancers.MailerEnhancer;
 import play.classloading.enhancers.PropertiesEnhancer;
 import play.classloading.enhancers.SigEnhancer;
@@ -72,6 +72,9 @@ public class CorePlugin extends PlayPlugin {
     /**
      * Intercept /@status and check that the Authorization header is valid. 
      * Then ask each plugin for a status dump and send it over the HTTP response.
+     *
+     * You can ask the /@status using the authorization header and putting your status secret key in it.
+     * Prior to that you would be required to start play with  a -DstatusKey=yourkey
      */
     @Override
     public boolean rawInvocation(Request request, Response response) throws Exception {
@@ -91,7 +94,7 @@ public class CorePlugin extends PlayPlugin {
             }
             response.contentType = request.path.contains(".json") ? "application/json" : "text/plain";
             Header authorization = request.headers.get("authorization");
-            if (request.isLoopback || (authorization != null && Crypto.sign("@status").equals(authorization.value()))) {
+            if (authorization != null && (Crypto.sign("@status").equals(authorization.value()) || System.getProperty("statusKey", Play.secretKey).equals(authorization.value()))) {
                 response.print(computeApplicationStatus(request.path.contains(".json")));
                 response.status = 200;
                 return true;
@@ -147,12 +150,6 @@ public class CorePlugin extends PlayPlugin {
         out.println("~~~~~~~~~~~~~~");
         for (PlayPlugin plugin : Play.pluginCollection.getAllPlugins()) {
             out.println(plugin.index + ":" + plugin.getClass().getName() + " [" + (Play.pluginCollection.isEnabled(plugin) ? "enabled" : "disabled") + "]");
-        }
-        out.println();
-        out.println("Configuration:");
-        out.println("~~~~~~~~~~~~~~");
-        for (Object key : Play.configuration.keySet()) {
-            out.println(key + "=" + Play.configuration.getProperty(key.toString()));
         }
         out.println();
         out.println("Threads:");
@@ -298,10 +295,10 @@ public class CorePlugin extends PlayPlugin {
         Class<?>[] enhancers = new Class[]{
             PropertiesEnhancer.class,
             ContinuationEnhancer.class,
-            SigEnhancer.class,         
+            SigEnhancer.class,
             ControllersEnhancer.class,
             MailerEnhancer.class,
-            LVEnhancer.class
+            LocalvariablesNamesEnhancer.class
         };
         for (Class<?> enhancer : enhancers) {
             try {

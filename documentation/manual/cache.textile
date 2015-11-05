@@ -1,14 +1,6 @@
 h1. Use a cache
 
-To create high-performance systems, sometimes you need to cache data. 
-
-Play provides a pluggable cache infrastructure that you may use via: 
-* the @cacheFor@ annotation your actions
-* the cache API
-
-h2. Configuration
-
-Play will use "Memcached":http://www.danga.com/memcached/ when used in a distributed environment.
+To create high-performance systems, sometimes you need to cache data. Play has a cache library and will use "Memcached":http://www.danga.com/memcached/ when used in a distributed environment.
 
 If you don’t configure Memcached, Play will use a standalone cache that stores data in the JVM heap. Caching data in the JVM application breaks the ‘share nothing’ assumption made by Play: you can’t run your application on several servers, and expect the application to behave consistently. Each application instance will have a different copy of the data.
 
@@ -55,7 +47,6 @@ The *default expiration* is @1h@.
 p(note). **Using expiration 0s**
  
 When specifying expiration == "0s" (zero seconds) the actual expiration-time may vary between different cache implementations
-
 h2. <a name="api">The cache API</a>
 
 The cache API is provided by the @play.cache.Cache@ class. This class contains the set of methods to set, replace, and get data from the cache. Refer to the Memcached documentation to understand the exact behavior of each method.

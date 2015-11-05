@@ -99,13 +99,13 @@ public class SslHttpServerContextFactory {
 
                 reader = new PEMReader(new FileReader(Play.getFile(p.getProperty("certificate.file", "conf/host.cert"))));
 
-        		X509Certificate cert;
-        		Vector chainVector = new Vector();
-        
-        		while ((cert = (X509Certificate) reader.readObject()) != null) {
-        		    chainVector.add(cert);
-        		}
-        		chain = (X509Certificate[])chainVector.toArray(new X509Certificate[1]);
+		X509Certificate cert;
+		Vector chainVector = new Vector();
+
+		while ((cert = (X509Certificate) reader.readObject()) != null) {
+		    chainVector.add(cert);
+		}
+		chain = (X509Certificate[])chainVector.toArray(new X509Certificate[1]);
             } catch (Exception e) {
                 e.printStackTrace();
                 Logger.error(e, "");

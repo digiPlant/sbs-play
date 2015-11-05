@@ -3,7 +3,7 @@ import play.test.*;
 import play.mvc.*;
 import play.mvc.Http.*;
 import models.*;
-import play.*;
+import play.Play;
 
 public class ApplicationTest extends FunctionalTest {
 

@@ -221,7 +221,7 @@ To keep the @lib/@ and @modules/@ directory synced with the dependency managemen
 
 bc. play dependencies --sync
 
-If you run this command again the unwanted **JAR** will be deleted. 
+If you run this command again the unwanted **JAR** will be deleted.
 
 When you deploy an application in production, you can reduce the size of its modules by removing module source code and documentation. You can do this by adding the @--forProd@ option to the command:
 

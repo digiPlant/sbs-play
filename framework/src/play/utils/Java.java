@@ -1,12 +1,29 @@
 package play.utils;
 
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.FutureTask;
+
 import javassist.ClassPool;
 import javassist.CtClass;
 import javassist.bytecode.SourceFileAttribute;
 import play.Play;
 import play.classloading.ApplicationClassloaderState;
-import play.classloading.enhancers.LVEnhancer;
+import play.classloading.enhancers.LocalvariablesNamesEnhancer.LocalVariablesNamesTracer;
 import play.data.binding.Binder;
 import play.data.binding.ParamNode;
 import play.data.binding.RootParamNode;
@@ -188,7 +205,7 @@ public class Java {
         {
             invokedClass = assignableClasses.get(0);
         }
-        
+
         return Java.invokeStaticOrParent(invokedClass, method, args);
     }
 
@@ -220,14 +237,7 @@ public class Java {
      */
     public static String[] parameterNames(Method method) throws Exception {
         try {
-            /*System.out.println("searching for " + "$" + method.getName() + LVEnhancer.computeMethodHash(method.getParameterTypes()));
-            for(Field f : method.getDeclaringClass().getDeclaredFields()) {
-                System.out.println(f.getName() + " : " + Modifier.toString(f.getModifiers()));
-            }
-            for(Field f : method.getDeclaringClass().getFields()) {
-                System.out.println(f.getName() + " : " + Modifier.toString(f.getModifiers()));
-            }*/
-            return (String[]) method.getDeclaringClass().getDeclaredField("$" + method.getName() + LVEnhancer.computeMethodHash(method.getParameterTypes())).get(null);
+            return (String[]) method.getDeclaringClass().getDeclaredField("$" + method.getName() + LocalVariablesNamesTracer.computeMethodHash(method.getParameterTypes())).get(null);
         } catch (Exception e) {
             throw new UnexpectedException("Cannot read parameter names for " + method, e);
         }

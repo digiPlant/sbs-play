@@ -29,6 +29,7 @@ public class PlayDocumentation extends Controller {
         page("home", null, docLang);
     }
 
+    @SuppressWarnings("unchecked")
     public static void page(String id, String module, String docLang) throws Exception {
         String docLangDir = (docLang != null && (!"en".equalsIgnoreCase(docLang) && !docLang.matches("en-.*"))) ? "_"
                 + docLang + "/" : "/";

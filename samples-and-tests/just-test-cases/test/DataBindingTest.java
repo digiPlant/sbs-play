@@ -72,6 +72,7 @@ public class DataBindingTest extends FunctionalTest {
      */
     @Test
     public void testJPABinding() {
+	Fixtures.idCache.clear();
 	Fixtures.deleteAllModels();
 	Fixtures.loadModels("pc.yml");
 	
@@ -114,6 +115,7 @@ public class DataBindingTest extends FunctionalTest {
      */
     @Test
     public void testNoBindingAndFixtures() {
+	Fixtures.idCache.clear();
 	Fixtures.deleteAllModels();
 	Fixtures.loadModels("pc.yml");
 	
@@ -134,6 +136,7 @@ public class DataBindingTest extends FunctionalTest {
      */
     @Test
     public void testSaveEntityWithNoBindingAnnotation() {
+	Fixtures.idCache.clear();
 	Fixtures.deleteAllModels();
 	Fixtures.loadModels("pc.yml");
 	

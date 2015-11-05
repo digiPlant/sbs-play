@@ -295,7 +295,66 @@ public class WithContinuations extends Controller {
         
         render(n,a,b,c,d,e);
     }
+    
+        public static void usingRenderArgsAndAwait() {
+        renderArgs.put("a", "1");
+        int size = Scope.RenderArgs.current().data.size();
+        await(10);
+        renderArgs.put("b", "2");
+        size++;
 
+        play.jobs.Job<String> job = new play.jobs.Job<String>(){
+            public String doJobWithResult() {
+                return "B";
+            }
+        };
+        
+        String b = await(job.now());
+        
+        renderArgs.put("c", "3");
+        size++;
+        
+        await( new CompletedFuture<Boolean>(true));
+        
+        renderArgs.put("d", "4");
+        size++;
+        
+        boolean res = "1234".equals(""+renderArgs.get("a")+renderArgs.get("b")+renderArgs.get("c")+renderArgs.get("d")) && size == Scope.RenderArgs.current().data.size();
+        
+        renderText( res );
+    }
+    
+    public static void usingRenderArgsAndAwaitWithCallBack(String arg) {
+         renderArgs.put("arg", arg);
+
+         await("1s", new F.Action0() {
+
+             @Override
+             public void invoke() {
+                 renderText(renderArgs.get("arg"));
+             }
+         });
+    }
+
+    public static void usingRenderArgsAndAwaitWithFutureAndCallback(final String arg) {
+        renderArgs.put("arg", arg);
+
+        Promise<String> promise = new play.jobs.Job() {
+            @Override
+            public String doJobWithResult() throws Exception {
+                return "result";
+        }
+
+        }.now();
+        await(promise, new F.Action<String>() {
+
+            @Override
+            public void invoke(String result) {
+                renderText(result + "/" + renderArgs.get("arg"));
+            }
+        });
+    }
+    
     // This class does not use await() directly and therefor is not enhanched for Continuations
     public static class ControllerWithoutContinuations extends Controller{
         
@@ -364,66 +423,6 @@ public class WithContinuations extends Controller {
         }
     }
     
-    
-    public static void usingRenderArgsAndAwait() {
-        renderArgs.put("a", "1");
-        int size = Scope.RenderArgs.current().data.size();
-        await(10);
-        renderArgs.put("b", "2");
-        size++;
-        
-        play.jobs.Job<String> job = new play.jobs.Job<String>(){
-            public String doJobWithResult() {
-                return "B";
-            }
-        };
-        
-        String b = await(job.now());
-        
-        renderArgs.put("c", "3");
-        size++;
-        
-        await( new CompletedFuture<Boolean>(true));
-        
-        renderArgs.put("d", "4");
-        size++;
-        
-        boolean res = "1234".equals(""+renderArgs.get("a")+renderArgs.get("b")+renderArgs.get("c")+renderArgs.get("d")) && size == Scope.RenderArgs.current().data.size();
-        
-        renderText( res );
-    }
-    
-    public static void usingRenderArgsAndAwaitWithCallBack(String arg) {
-         renderArgs.put("arg", arg);
-
-         await("1s", new F.Action0() {
-
-             @Override
-             public void invoke() {
-                 renderText(renderArgs.get("arg"));
-             }
-         });
-    }
-
-    public static void usingRenderArgsAndAwaitWithFutureAndCallback(final String arg) {
-        renderArgs.put("arg", arg);
-
-        Promise<String> promise = new play.jobs.Job() {
-            @Override
-            public String doJobWithResult() throws Exception {
-                return "result";
-        }
-
-        }.now();
-        await(promise, new F.Action<String>() {
-
-            @Override
-            public void invoke(String result) {
-                renderText(result + "/" + renderArgs.get("arg"));
-            }
-        });
-    }
-
     public static void echoParamsAfterAwait(String a, Integer b) {
         String beforeString = "before await: " + getEchoString(a,b);
         await(1);

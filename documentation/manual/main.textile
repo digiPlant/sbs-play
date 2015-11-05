@@ -144,7 +144,6 @@ For example, using the NetBeans debugger:
 
 !images/screenshot_attach-debugger!
 
-
 h2. Class enhancement
 
 A Play plug-in (i.e. a subclass of @play.PlayPlugin@) may include ‘enhancers’ that modify application classes at runtime, to add functionality. This is how some of Play’s magic works.
@@ -160,7 +159,7 @@ The built-in @play.CorePlugin@ uses enhancers from the @play.classloading.enhanc
 
 In addition, the @play.db.jpa.JPAPlugin@ enhances subclasses of @play.db.jpa.JPABase@ with implementations of the convenience methods for JPA queries. This normally applies to your application's model classes that subclass @play.db.jpa.Model@. The JPA queries in question are those defined in @play.db.jpa.GenericModel@.
 
-To add your own enhancer, call a subclass of @play.classloading.enhancers.Enhancer@ from your plug-in’s @enhance(ApplicationClass)@ method.
+To add your own enhancer, use a subclass of @play.classloading.enhancers.Enhancer@ in your plug-in’s @enhance(ApplicationClass)@ method.
 
 p(note). **Continuing the discussion**
  

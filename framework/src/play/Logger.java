@@ -70,7 +70,7 @@ public class Logger {
             PropertyConfigurator.configure(shutUp);
         } else if (Logger.log4j == null) {
 
-            if(log4jConf.getFile().indexOf(Play.applicationPath.getAbsolutePath()) == 0 ) {
+            if (log4jConf.getFile().indexOf(Play.applicationPath.getAbsolutePath()) == 0) {
                 // The log4j configuration file is located somewhere in the application folder,
                 // so it's probably a custom configuration file
                 configuredManually = true;
@@ -82,7 +82,7 @@ public class Logger {
             }
             Logger.log4j = org.apache.log4j.Logger.getLogger("play");
             // In test mode, append logs to test-result/application.log
-            if (Play.runningInTestMode()) {
+            if (Play.runingInTestMode()) {
                 org.apache.log4j.Logger rootLogger = org.apache.log4j.Logger.getRootLogger();
                 try {
                     if (!Play.getFile("test-result").exists()) {
@@ -168,7 +168,6 @@ public class Logger {
             return log4j.isTraceEnabled();
         }
     }
-
 
     /**
      *
@@ -597,16 +596,15 @@ public class Logger {
             }
 
             try {
-              if (forceJuli || log4j == null) {
-                  juli.log(toJuliLevel(level.toString()), sw.toString(), e);
-              } else if (recordCaller) {
-                org.apache.log4j.Logger.getLogger(getCallerClassName(5)).log(level, sw.toString(), null);
-              } else {
-                log4j.log(level, sw.toString(), e);
-              }
-            }
-            catch (Exception e1) {
-              log4j.error("Oops. Error in Logger !", e1);
+                if (forceJuli || log4j == null) {
+                    juli.log(toJuliLevel(level.toString()), sw.toString(), e);
+                } else if (recordCaller) {
+                    org.apache.log4j.Logger.getLogger(getCallerClassName(5)).log(level, sw.toString(), e);
+                } else {
+                    log4j.log(level, sw.toString(), e);
+                }
+            } catch (Exception e1) {
+                log4j.error("Oops. Error in Logger !", e1);
             }
             return true;
         }
@@ -652,7 +650,7 @@ public class Logger {
         final int level = 5;
         return getCallerClassName(level);
     }
-    
+
     /**
      * @return the className of the class actually logging the message
      */
@@ -735,5 +733,4 @@ public class Logger {
             // nothing to do
         }
     }
-
 }

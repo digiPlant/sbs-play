@@ -7,9 +7,9 @@ import org.apache.commons.mail.EmailException;
 import play.Logger;
 import play.Play;
 import play.exceptions.MailException;
-import play.utils.Utils;
 import play.libs.mail.*;
 import play.libs.mail.test.LegacyMockMailSystem;
+import play.utils.Utils;
 
 import javax.mail.*;
 

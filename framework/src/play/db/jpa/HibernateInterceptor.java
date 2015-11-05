@@ -1,39 +1,26 @@
 package play.db.jpa;
 
-import java.io.Serializable;
-
-import javax.persistence.GeneratedValue;
-import javax.persistence.Id;
-import javax.persistence.MappedSuperclass;
 
 import org.hibernate.CallbackException;
 import org.hibernate.EmptyInterceptor;
 import org.hibernate.collection.spi.PersistentCollection;
 import org.hibernate.type.Type;
+import java.io.Serializable;
 
-//Explicit SAVE for JPABase is implemented here
-// ~~~~~~
-// We've hacked the org.hibernate.event.def.AbstractFlushingEventListener line 271, to flush collection update,remove,recreation
-// only if the owner will be saved or if the targeted entity will be saved (avoid the org.hibernate.HibernateException: Found two representations of same collection)
-// As is:
-// if (session.getInterceptor().onCollectionUpdate(coll, ce.getLoadedKey())) {
-//      actionQueue.addAction(...);
-// }
-//
-// This is really hacky. We should move to something better than Hibernate like EBEAN
+
 public class HibernateInterceptor extends EmptyInterceptor {
 
-    public HibernateInterceptor() {
+  public HibernateInterceptor() {
 
+  }
+  
+  @Override
+  public int[] findDirty(Object o, Serializable id, Object[] arg2, Object[] arg3, String[] arg4, Type[] arg5) {
+    if (o instanceof JPABase && !((JPABase) o).willBeSaved) {
+      return new int[0];
     }
-
-    @Override
-    public int[] findDirty(Object o, Serializable id, Object[] arg2, Object[] arg3, String[] arg4, Type[] arg5) {
-        if (o instanceof JPABase && !((JPABase) o).willBeSaved) {
-            return new int[0];
-        }
-        return null;
-    }
+    return null;
+  }
 
     @Override
     public boolean onCollectionUpdate(Object collection, Serializable key) throws CallbackException {
@@ -66,6 +53,7 @@ public class HibernateInterceptor extends EmptyInterceptor {
         } else {
             System.out.println("HOO: Case not handled !!!");
         }
+
         return super.onCollectionRecreate(collection, key);
     }
 
@@ -98,5 +86,4 @@ public class HibernateInterceptor extends EmptyInterceptor {
     public void afterTransactionCompletion(org.hibernate.Transaction tx) {
         entities.remove();
     }
-
 }

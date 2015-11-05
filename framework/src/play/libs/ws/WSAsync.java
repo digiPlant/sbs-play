@@ -1,16 +1,23 @@
 package play.libs.ws;
 
+import java.io.*;
+import java.net.URLDecoder;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+
 import com.ning.http.client.*;
-import com.ning.http.client.AsyncHttpClient.BoundRequestBuilder;
-import com.ning.http.client.AsyncHttpClientConfig.Builder;
-import com.ning.http.client.Realm.AuthScheme;
-import com.ning.http.client.Realm.RealmBuilder;
 import oauth.signpost.AbstractOAuthConsumer;
 import oauth.signpost.exception.OAuthCommunicationException;
 import oauth.signpost.exception.OAuthExpectationFailedException;
 import oauth.signpost.exception.OAuthMessageSignerException;
 import oauth.signpost.http.HttpRequest;
+
 import org.apache.commons.lang.NotImplementedException;
+
 import play.Logger;
 import play.Play;
 import play.libs.F.Promise;
@@ -21,13 +28,16 @@ import play.libs.WS.WSImpl;
 import play.libs.WS.WSRequest;
 import play.mvc.Http.Header;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
-import java.net.URLDecoder;
-import java.net.URLEncoder;
-import java.util.*;
+import com.ning.http.client.AsyncHttpClient.BoundRequestBuilder;
+import com.ning.http.client.AsyncHttpClientConfig.Builder;
+import com.ning.http.client.FilePart;
+import com.ning.http.client.PerRequestConfig;
+import com.ning.http.client.ProxyServer;
+import com.ning.http.client.Realm.AuthScheme;
+import com.ning.http.client.Realm.RealmBuilder;
+import com.ning.http.client.Response;
+
+import javax.net.ssl.*;
 
 /**
  * Simple HTTP client to make webservices requests.
@@ -52,6 +62,7 @@ import java.util.*;
 public class WSAsync implements WSImpl {
 
     private AsyncHttpClient httpClient;
+    private static SSLContext sslCTX = null;
 
     public WSAsync() {
         String proxyHost = Play.configuration.getProperty("http.proxyHost", System.getProperty("http.proxyHost"));
@@ -60,6 +71,9 @@ public class WSAsync implements WSImpl {
         String proxyPassword = Play.configuration.getProperty("http.proxyPassword", System.getProperty("http.proxyPassword"));
         String nonProxyHosts = Play.configuration.getProperty("http.nonProxyHosts", System.getProperty("http.nonProxyHosts"));
         String userAgent = Play.configuration.getProperty("http.userAgent");
+        String keyStore = Play.configuration.getProperty("ssl.keyStore", System.getProperty("javax.net.ssl.keyStore"));
+        String keyStorePass = Play.configuration.getProperty("ssl.keyStorePassword", System.getProperty("javax.net.ssl.keyStorePassword"));
+        Boolean CAValidation = Boolean.parseBoolean(Play.configuration.getProperty("ssl.cavalidation", "true"));
 
         Builder confBuilder = new AsyncHttpClientConfig.Builder();
         if (proxyHost != null) {
@@ -82,6 +96,19 @@ public class WSAsync implements WSImpl {
         if (userAgent != null) {
             confBuilder.setUserAgent(userAgent);
         }
+
+        if (keyStore != null && !keyStore.equals("")) {
+
+            Logger.info("Keystore configured, loading from '%s', CA validation enabled : %s", keyStore, CAValidation);
+            if (Logger.isTraceEnabled()) {
+                Logger.trace("Keystore password : %s, SSLCTX : %s", keyStorePass, sslCTX);
+            }
+
+            if (sslCTX == null) {
+                sslCTX = WSSSLContext.getSslContext(keyStore, keyStorePass, CAValidation);
+                confBuilder.setSSLContext(sslCTX);
+            }
+        }
         // when using raw urls, AHC does not encode the params in url.
         // this means we can/must encode it(with correct encoding) before passing it to AHC
         confBuilder.setUseRawUrl(true);
@@ -96,6 +123,8 @@ public class WSAsync implements WSImpl {
     public WSRequest newRequest(String url, String encoding) {
         return new WSAsyncRequest(url, encoding);
     }
+
+
 
     public class WSAsyncRequest extends WSRequest {
 
@@ -370,6 +399,9 @@ public class WSAsync implements WSImpl {
             PerRequestConfig perRequestConfig = new PerRequestConfig();
             perRequestConfig.setRequestTimeoutInMs(this.timeout * 1000);
             builder.setPerRequestConfig(perRequestConfig);
+            if (this.virtualHost != null) {
+                builder.setVirtualHost(this.virtualHost);
+            }
             return builder;
         }
 
@@ -642,6 +674,11 @@ public class WSAsync implements WSImpl {
 
             public String getContentType() {
                 return request.mimeType;
+            }
+
+            @Override
+            public Object unwrap() {
+                return null;
             }
 
             public String getHeader(String name) {

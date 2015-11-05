@@ -1,17 +1,16 @@
 package play.data;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.io.FilenameUtils;
-
 import play.data.parsing.TempFilePlugin;
 import play.exceptions.UnexpectedException;
 import play.libs.Files;
 import play.libs.IO;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
 public class FileUpload implements Upload {
 
@@ -25,7 +24,6 @@ public class FileUpload implements Upload {
     public FileUpload(FileItem fileItem) {
         this.fileItem = fileItem;
         File tmp = TempFilePlugin.createTempFolder();
-        defaultFile = new File(tmp, fileItem.getFieldName() + File.separator + fileItem.getName());
         // Check that the file has a name to avoid to override the field folder
         if (fileItem.getName().trim().length() > 0) {
             defaultFile = new File(tmp, FilenameUtils.getName(fileItem.getFieldName()) + File.separator
@@ -91,7 +89,7 @@ public class FileUpload implements Upload {
 
     @Override
     public Long getSize() {
-        return defaultFile.length();
+        return defaultFile == null ? null : defaultFile.length();
     }
 
     @Override

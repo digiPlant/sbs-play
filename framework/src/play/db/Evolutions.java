@@ -9,6 +9,7 @@ import play.classloading.ApplicationClasses;
 import play.classloading.ApplicationClassloader;
 import play.db.evolutions.Evolution;
 import play.db.evolutions.EvolutionQuery;
+import play.db.evolutions.EvolutionState;
 import play.db.evolutions.exceptions.InconsistentDatabase;
 import play.db.evolutions.exceptions.InvalidDatabaseRevision;
 import play.exceptions.UnexpectedException;
@@ -28,8 +29,11 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.Stack;
+
 
 /**
  * Handles migration of data.
@@ -38,13 +42,13 @@ import java.util.Stack;
  */
 public class Evolutions extends PlayPlugin {
 
+    private static String EVOLUTIONS_TABLE_NAME = "play_evolutions";
+    protected static File evolutionsDirectory = Play.getFile("db/evolutions");
+    
     private static Map<String, VirtualFile> modulesWithEvolutions = new LinkedHashMap<String, VirtualFile>();
 
 
-
     public static void main(String[] args) throws SQLException {
-
-
         /** Start the DB plugin **/
         Play.id = System.getProperty("play.id");
         Play.applicationPath = new File(System.getProperty("application.path"));
@@ -67,119 +71,193 @@ public class Evolutions extends PlayPlugin {
 
         if (modulesWithEvolutions.isEmpty()) {
             System.out.println("~ Nothing has evolutions, go away and think again.");
+            System.exit(-1);
             return;
         }
 
         Logger.init();
         Logger.setUp("ERROR");
         new DBPlugin().onApplicationStart();
+        
+        // Look over all the DB
+        Set<String> dBNames = Configuration.getDbNames();
+        boolean defaultExitCode = true;
+                
+        for (String dbName : dBNames) {
+            Configuration dbConfig = new Configuration(dbName);
+            /** Connected **/
+            System.out.println("~ Connected to " + DB.getDataSource(dbName).getConnection().getMetaData().getURL());
 
-        /** Connected **/
-        System.out.println("~ Connected to " + EvolutionQuery.getDatasource().getConnection().getMetaData().getURL());
+            for (Entry<String, VirtualFile> moduleRoot : modulesWithEvolutions.entrySet()) {
 
-        for(Entry<String, VirtualFile> moduleRoot : modulesWithEvolutions.entrySet()) {       
+                /** Summary **/
+                Evolution database = listDatabaseEvolutions(dbName, moduleRoot.getKey()).peek();
+                Evolution application = listApplicationEvolutions(dbName, moduleRoot.getKey(), moduleRoot.getValue()).peek();
 
-            /** Sumary **/
-            Evolution database = listDatabaseEvolutions(moduleRoot.getKey()).peek();
-            Evolution application = listApplicationEvolutions(moduleRoot.getKey(), moduleRoot.getValue()).peek();
-
-            if ("resolve".equals(System.getProperty("mode"))) {
-                try {
-                    checkEvolutionsState();
-                    System.out.println("~");
-                    System.out.println("~ Nothing to resolve for " + moduleRoot.getKey() + "...");
-                    System.out.println("~");
-                    return;
-                } catch (InconsistentDatabase e) {
-                    resolve(moduleRoot.getKey(), e.getRevision());
-                    System.out.println("~");
-                    System.out.println("~ Revision " + e.getRevision() + " for " + moduleRoot.getKey() + " has been resolved;");
-                    System.out.println("~");
-                } catch (InvalidDatabaseRevision e) {
-                    // see later
+                boolean needToCheck = true;
+                if ("resolve".equals(System.getProperty("mode"))) {
+                    needToCheck = handleResolveAction(dbName, moduleRoot);
                 }
-            }
-
-            /** Check inconsistency **/
-            try {
-                checkEvolutionsState();
-            } catch (InconsistentDatabase e) {
-                System.out.println("~");
-                System.out.println("~ Your database is in an inconsistent state!");
-                System.out.println("~");
-                System.out.println("~ While applying this script part:");
-                System.out.println("");
-                System.out.println(e.getEvolutionScript());
-                System.out.println("");
-                System.out.println("~ The following error occured:");
-                System.out.println("");
-                System.out.println(e.getError());
-                System.out.println("");
-                System.out.println("~ Please correct it manually, and mark it resolved by running `play evolutions:resolve`");
-                System.out.println("~");
-                return;
-            } catch (InvalidDatabaseRevision e) {
-                // see later
-            }
-
-            System.out.print("~ '" + moduleRoot.getKey()+ "' Application revision is " + application.revision + " [" + application.hash.substring(0, 7) + "]");
-            System.out.println(" and '" + moduleRoot.getKey()+ "' Database revision is " + database.revision + " [" + database.hash.substring(0, 7) + "]");
-            System.out.println("~");
-
-            /** Evolution script **/
-            List<Evolution> evolutions = getEvolutionScript(moduleRoot.getKey(), moduleRoot.getValue());
-            if (evolutions.isEmpty()) {
-                System.out.println("~ Your database is up to date for " + moduleRoot.getKey());
-                System.out.println("~");
-            } else {
-                if ("apply".equals(System.getProperty("mode"))) {
-                    System.out.println("~ Applying evolutions for " + moduleRoot.getKey() + ":");
-                    System.out.println("");
-                    System.out.println("# ------------------------------------------------------------------------------");
-                    System.out.println("");
-                    System.out.println(toHumanReadableScript(evolutions));
-                    System.out.println("");
-                    System.out.println("# ------------------------------------------------------------------------------");
-                    System.out.println("");
-                    if (applyScript(true, moduleRoot.getKey(), moduleRoot.getValue())) {
+                if (needToCheck) {
+                    /** Check inconsistency **/
+                    try {
+                        checkEvolutionsState(dbName);
+                    } catch (InconsistentDatabase e) {
+                        defaultExitCode = false;
                         System.out.println("~");
-                        System.out.println("~ Evolutions script successfully applied for " + moduleRoot.getKey() + "!");
+                        System.out.println("~ Your database " + dbName + " is in an inconsistent state!");
                         System.out.println("~");
-                    } else {
+                        System.out.println("~ While applying this script part:");
+                        System.out.println("");
+                        System.out.println(e.getEvolutionScript());
+                        System.out.println("");
+                        System.out.println("~ The following error occured:");
+                        System.out.println("");
+                        System.out.println(e.getError());
+                        System.out.println("");
+                        System.out
+                                .println("~ Please correct it manually, and mark it resolved by running `play evolutions:resolve`");
                         System.out.println("~");
-                        System.out.println("~ Can't apply evolutions for " + moduleRoot.getKey() + "...");
-                        System.out.println("~");
+                        continue;
+                    } catch (InvalidDatabaseRevision e) {
+                        // see later
                     }
 
-
-                } else if ("markApplied".equals(System.getProperty("mode"))) {
-
-                    if (applyScript(false, moduleRoot.getKey(), moduleRoot.getValue())) {
-                        System.out.println("~ Evolutions script marked as applied for " + moduleRoot.getKey() + "!");
-                        System.out.println("~");
-                    } else {
-                        System.out.println("~ Can't apply evolutions for " + moduleRoot.getKey() + "...");
-                        System.out.println("~");
-                    }
-
-                } else {
-
-                    System.out.println("~ Your database needs evolutions for " + moduleRoot.getKey() + "!");
-                    System.out.println("");
-                    System.out.println("# ------------------------------------------------------------------------------");
-                    System.out.println("");
-                    System.out.println(toHumanReadableScript(evolutions));
-                    System.out.println("");
-                    System.out.println("# ------------------------------------------------------------------------------");
-                    System.out.println("");
-                    System.out.println("~ Run `play evolutions:apply` to automatically apply this script to the database");
-                    System.out.println("~ or apply it yourself and mark it done using `play evolutions:markApplied`");
+                    System.out.print("~ '" + moduleRoot.getKey() + "' Application revision is " + application.revision
+                            + " [" + application.hash.substring(0, 7) + "]");
+                    System.out.println(" and '" + moduleRoot.getKey() + "' Database revision is " + database.revision
+                            + " [" + database.hash.substring(0, 7) + "]");
                     System.out.println("~");
-                    System.exit(-1);
+
+                    /** Evolution script **/
+                    List<Evolution> evolutions = getEvolutionScript(dbName, moduleRoot.getKey(), moduleRoot.getValue());
+                    if (evolutions.isEmpty()) {
+                        System.out.println("~ Your database " + dbName + " is up to date for " + moduleRoot.getKey());
+                        System.out.println("~");
+                    } else {
+                        if ("apply".equals(System.getProperty("mode"))) {
+                            if (!handleApplyAction(dbName, moduleRoot, evolutions)) {
+                                defaultExitCode = false;
+                            }
+                        } else if ("markApplied".equals(System.getProperty("mode"))) {
+                            if (!handleMarkAppliedAction(dbName, moduleRoot, evolutions)) {
+                                defaultExitCode = false;
+                            }
+                        } else {
+                            defaultExitCode = false;
+                            handleDefaultAction(dbName, moduleRoot, evolutions);
+                        }
+                    }
                 }
             }
         }
+        
+        if (!defaultExitCode) {
+            System.exit(-1);
+        }
     }
+    /**
+     * Method to handle the "default" action
+     * @param dbName : database name
+     * @param moduleRoot : the module root of evolutions
+     * @param evolutions : list of evolutions
+     */
+    private static void handleDefaultAction(String dbName,  Entry<String, VirtualFile> moduleRoot, List<Evolution> evolutions){
+        System.out.println("~ Your database " + dbName + " needs evolutions for " + moduleRoot.getKey() + "!");
+        System.out.println("");
+        System.out
+                .println("# ------------------------------------------------------------------------------");
+        System.out.println("");
+        System.out.println(toHumanReadableScript(evolutions));
+        System.out.println("");
+        System.out
+                .println("# ------------------------------------------------------------------------------");
+        System.out.println("");
+        System.out
+                .println("~ Run `play evolutions:apply` to automatically apply this script to the database");
+        System.out
+                .println("~ or apply it yourself and mark it done using `play evolutions:markApplied`");
+        System.out.println("~"); 
+    }
+    
+    /**
+     * Method to handle the "resolve" action
+     * @param dbName : database name
+     * @param moduleRoot : the module root of evolutions
+     * @param evolutions : list of evolutions
+     * @return true if need to check, false otherwise
+     */
+    private static boolean handleResolveAction(String dbName,  Entry<String, VirtualFile> moduleRoot){
+        try {
+            checkEvolutionsState(dbName);
+            System.out.println("~");
+            System.out.println("~ Nothing to resolve for " + moduleRoot.getKey() + "...");
+            System.out.println("~");
+            return false;
+        } catch (InconsistentDatabase e) {
+            resolve(dbName, moduleRoot.getKey(), e.getRevision());
+            System.out.println("~");
+            System.out.println("~ Revision " + e.getRevision() + " for " + moduleRoot.getKey()
+                    + " has been resolved;");
+            System.out.println("~");
+        } catch (InvalidDatabaseRevision e) {
+            // see later
+        }
+        return true;
+    }
+    
+    /**
+     * Method to handle the "apply" action
+     * @param dbName : database name
+     * @param moduleRoot : the module root of evolutions
+     * @param evolutions : list of evolutions
+     * @return true if action was applied successfully, false otherwise
+     */
+    private static boolean handleApplyAction(String dbName,  Entry<String, VirtualFile> moduleRoot, List<Evolution> evolutions){
+        System.out.println("~ Applying evolutions for " + moduleRoot.getKey() + ":");
+        System.out.println("");
+        System.out
+                .println("# ------------------------------------------------------------------------------");
+        System.out.println("");
+        System.out.println(toHumanReadableScript(evolutions));
+        System.out.println("");
+        System.out
+                .println("# ------------------------------------------------------------------------------");
+        System.out.println("");
+        if (applyScript(dbName, true, moduleRoot.getKey(), moduleRoot.getValue())) {
+            System.out.println("~");
+            System.out.println("~ Evolutions script successfully applied for " + moduleRoot.getKey()
+                    + "!");
+            System.out.println("~");
+            return true;
+        } else {
+            System.out.println("~");
+            System.out.println("~ Can't apply evolutions for " + moduleRoot.getKey() + "...");
+            System.out.println("~");
+            return false;
+        }
+    }
+    
+    /**
+     * Method to handle the "markApplied" action
+     * @param dbName : database name
+     * @param moduleRoot : the module root of evolutions
+     * @param evolutions : list of evolutions
+     * @return true if action was applied successfully, false otherwise
+     */
+    private static boolean handleMarkAppliedAction(String dbName,  Entry<String, VirtualFile> moduleRoot, List<Evolution> evolutions){ 
+        if (applyScript(dbName, false, moduleRoot.getKey(), moduleRoot.getValue())) {
+            System.out
+                    .println("~ Evolutions script marked as applied for " + moduleRoot.getKey() + "!");
+            System.out.println("~");
+            return true;
+        } else {
+            System.out.println("~ Can't apply evolutions for " + moduleRoot.getKey() + "...");
+            System.out.println("~");
+            return false;
+        }
+    }
+    
 
     private static void populateModulesWithSpecificModules() {
         String[] specificModules = System.getProperty("modules").split(",");
@@ -200,13 +278,14 @@ public class Evolutions extends PlayPlugin {
                     modulesWithEvolutions.put(specificModule, moduleRoot.child("db/evolutions"));
                 } else {
                     System.out.println("~ '" + specificModule + "' module doesn't have any evolutions scripts in it or evolutions are disabled.");
-	            System.out.println("~");
+	                System.out.println("~");
                     System.exit(-1);
                 }
             } else if (Play.configuration.getProperty("application.name").equals(specificModule))  {
                 weShouldAddTheMainProject = true;
             } else {
                 System.out.println("~ Couldn't find a module with the name '" + specificModule + "'. ");
+                System.exit(-1);
             }
         }
 
@@ -240,7 +319,6 @@ public class Evolutions extends PlayPlugin {
         }
     }
 
-    static File evolutionsDirectory = Play.getFile("db/evolutions");
 
     @Override
     public boolean rawInvocation(Request request, Response response) throws Exception {
@@ -248,9 +326,12 @@ public class Evolutions extends PlayPlugin {
         // Mark an evolution as resolved
         if (Play.mode.isDev() && request.method.equals("POST") && request.url.matches("^/@evolutions/force/[a-zA-Z0-9]+/[0-9]+$")) {            
             int index = request.url.lastIndexOf("/@evolutions/force/") + "/@evolutions/force/".length();
+            
+            String dbName = DB.DEFAULT;
             String moduleKey = request.url.substring(index, request.url.lastIndexOf("/"));
             int revision = Integer.parseInt(request.url.substring(request.url.lastIndexOf("/") + 1));
-            resolve(moduleKey, revision);
+            
+            resolve(dbName, moduleKey, revision);
             new Redirect("/").apply(request, response);
             return true;
         }
@@ -275,14 +356,20 @@ public class Evolutions extends PlayPlugin {
         try {
             checkEvolutionsState();
         } catch (InvalidDatabaseRevision e) {
-        	Logger.info("Automatically applying evolutions in in-memory database");
-            for(Entry<String, VirtualFile> moduleRoot : modulesWithEvolutions.entrySet()) {            
-                if ("mem".equals(Play.configuration.getProperty("db")) && listDatabaseEvolutions(moduleRoot.getKey()).peek().revision == 0) {
-                	Logger.info("Applying evolutions for '" + moduleRoot.getKey() + "'");
-                    applyScript(true, moduleRoot.getKey(), moduleRoot.getValue());
-                } else {
-                    throw e;
-                }
+            Set<String> dbNames = Configuration.getDbNames();
+            for (String dbName : dbNames) {
+                Configuration dbConfig = new Configuration(dbName);
+              
+                for (Entry<String, VirtualFile> moduleRoot : modulesWithEvolutions.entrySet()) {
+                    if ("mem".equals(dbConfig.getProperty("db"))
+                            && listDatabaseEvolutions(e.getDbName(), moduleRoot.getKey()).peek().revision == 0) {
+                        Logger.info("Automatically applying evolutions in in-memory database");
+                        Logger.info("Applying evolutions for '" + moduleRoot.getKey() + "'");
+                        applyScript(true, moduleRoot.getKey(), moduleRoot.getValue());
+                    } else {
+                        throw e;
+                    }
+                }  
             }
         }
     }
@@ -291,8 +378,7 @@ public class Evolutions extends PlayPlugin {
     public void onApplicationStart() {
         if (!isDisabled()) {
             populateModulesWithEvolutions();
-
-            if (Play.mode.isProd()) {
+            if ( Play.mode.isProd()) {
                 try {
                     checkEvolutionsState();
                 } catch (InvalidDatabaseRevision e) {
@@ -312,55 +398,86 @@ public class Evolutions extends PlayPlugin {
         return "false".equals(Play.configuration.getProperty("evolutions.enabled", "true"));
     }
     
-    private static boolean isModuleEvolutionDisabled(){
+    private static boolean isModuleEvolutionDisabled() {
         return "false".equals(Play.configuration.getProperty("modules.evolutions.enabled", "true")); 
     }
     
-    private static boolean isModuleEvolutionDisabled(String name){
+    private static boolean isModuleEvolutionDisabled(String name) {
         return "false".equals(Play.configuration.getProperty(name + ".evolutions.enabled", "true")); 
     }
-    
+
     public static boolean autoCommit() {
         return ! "false".equals(Play.configuration.getProperty("evolutions.autocommit", "true"));
     }
     
+    
     public static synchronized void resolve(int revision) {
         try {
-            EvolutionQuery.resolve(revision, Play.configuration.getProperty("application.name"));
+            EvolutionQuery.resolve(DB.DEFAULT, revision, Play.configuration.getProperty("application.name"));
         } catch (Exception e) {
             throw new UnexpectedException(e);
         }
     }
     
-    public static synchronized void resolve(String moduleKey, int revision) {
+    public static synchronized void resolve(String dBName, int revision) {
         try {
-            EvolutionQuery.resolve(revision, moduleKey);
+            EvolutionQuery.resolve(dBName, revision, Play.configuration.getProperty("application.name"));
         } catch (Exception e) {
             throw new UnexpectedException(e);
         }
     }
 
-    public static synchronized boolean applyScript(boolean runScript, String moduleKey, VirtualFile evolutionsDirectory) {
+    
+    public static synchronized void resolve(String dBName, String moduleKey, int revision) {
         try {
-            Connection connection =  EvolutionQuery.getNewConnection(Evolutions.autoCommit());
+            EvolutionQuery.resolve(dBName, revision, moduleKey);
+        } catch (Exception e) {
+            throw new UnexpectedException(e);
+        }
+    }
+
+    public static synchronized boolean applyScript(boolean runScript, String moduleKey, VirtualFile evolutionsDirectory) {       
+        // Look over all the DB
+        Set<String> dBNames = Configuration.getDbNames();
+        for(String dbName: dBNames){
+            return applyScript(dbName, runScript, moduleKey, evolutionsDirectory);
+        }
+        return true;
+    }
+    
+    
+    public static synchronized boolean applyScript(String dbName, boolean runScript, String moduleKey, VirtualFile evolutionsDirectory) {
+        try {
+            Connection connection = EvolutionQuery.getNewConnection(dbName, Evolutions.autoCommit());
             int applying = -1;
             try {
-                for (Evolution evolution : getEvolutionScript(moduleKey, evolutionsDirectory)) {
+                List<Evolution> evolutions = getEvolutionScript(dbName, moduleKey, evolutionsDirectory);
+                for (Evolution evolution : evolutions) {
                     applying = evolution.revision;                  
                     EvolutionQuery.apply(connection, runScript, evolution, moduleKey);               
                 }
-                return true;
-            } catch (Exception e) {
-                String message = e.getMessage();
-                if (e instanceof SQLException) {
-                    SQLException ex = (SQLException) e;
-                    message += " [ERROR:" + ex.getErrorCode() + ", SQLSTATE:" + ex.getSQLState() + "]";
+                
+                if(!Evolutions.autoCommit()) {
+                    connection.commit();
                 }
                 
-                EvolutionQuery.setProblem(connection, applying, moduleKey, message);
-                EvolutionQuery.closeConnection(connection);
-                Logger.error(e, "Can't apply evolution");
+                return true;
+            } catch (Exception e) {
+            	Logger.error(e, "Can't apply evolution");
+            	if(Evolutions.autoCommit()) {
+	                String message = e.getMessage();
+	                if (e instanceof SQLException) {
+	                    SQLException ex = (SQLException) e;
+	                    message += " [ERROR:" + ex.getErrorCode() + ", SQLSTATE:" + ex.getSQLState() + "]";
+	                }
+                
+                	EvolutionQuery.setProblem(connection, applying, moduleKey, message);                 
+            	} else {
+            		connection.rollback();
+            	}
                 return false;
+            } finally {
+                EvolutionQuery.closeConnection(connection);               
             }
         } catch (Exception e) {
             throw new UnexpectedException(e);
@@ -387,30 +504,38 @@ public class Evolutions extends PlayPlugin {
 
         return sql.toString().trim();
     }
+    
+    public synchronized static void checkEvolutionsState() {        
+        // Look over all the DB
+        Set<String> dBNames = Configuration.getDbNames();
+        for(String dbName: dBNames){
+            checkEvolutionsState(dbName);
+        }
+    }
+    
 
-    public synchronized static void checkEvolutionsState() {
-
+    public synchronized static void checkEvolutionsState(String dbName) {
         for(Entry<String, VirtualFile> moduleRoot : modulesWithEvolutions.entrySet()) {            
 
-            if (EvolutionQuery.getDatasource() != null) {
-                List<Evolution> evolutionScript = getEvolutionScript(moduleRoot.getKey(), moduleRoot.getValue());
+            if (DB.getDataSource(dbName) != null) {
+                List<Evolution> evolutionScript = getEvolutionScript(dbName, moduleRoot.getKey(), moduleRoot.getValue());
                 Connection connection = null;
                 try {
-                    connection = EvolutionQuery.getNewConnection();   
+                    connection = EvolutionQuery.getNewConnection(dbName);   
                     ResultSet rs = EvolutionQuery.getEvolutionsToApply(connection, moduleRoot.getKey());
                     if (rs.next()) {
                         int revision = rs.getInt("id");
                         String state = rs.getString("state");
                         String hash = rs.getString("hash").substring(0, 7);
                         String script = "";
-                        if (state.equals("applying_up")) {
+                        if (EvolutionState.APPLYING_UP.getStateWord().equals(state)) {
                             script = rs.getString("apply_script");
                         } else {
                             script = rs.getString("revert_script");
                         }
-                        script = "# --- Rev:" + revision + "," + (state.equals("applying_up") ? "Ups" : "Downs") + " - " + hash + "\n\n" + script;
+                        script = "# --- Rev:" + revision + "," + (EvolutionState.APPLYING_UP.getStateWord().equals(state) ? "Ups" : "Downs") + " - " + hash + "\n\n" + script;
                         String error = rs.getString("last_problem");
-                        throw new InconsistentDatabase(script, error, revision, moduleRoot.getKey());
+                        throw new InconsistentDatabase(dbName, script, error, revision, moduleRoot.getKey());
                     }
                 } catch (SQLException e) {
                     throw new UnexpectedException(e);
@@ -419,15 +544,15 @@ public class Evolutions extends PlayPlugin {
                 }
 
                 if (!evolutionScript.isEmpty()) {
-                    throw new InvalidDatabaseRevision(toHumanReadableScript(evolutionScript));
+                    throw new InvalidDatabaseRevision(dbName, toHumanReadableScript(evolutionScript));
                 }
             }
         }
     }
 
-    public synchronized static List<Evolution> getEvolutionScript(String moduleKey, VirtualFile evolutionsDirectory) {
-        Stack<Evolution> app = listApplicationEvolutions(moduleKey, evolutionsDirectory);
-        Stack<Evolution> db = listDatabaseEvolutions(moduleKey);
+    public synchronized static List<Evolution> getEvolutionScript(String dbName, String moduleKey, VirtualFile evolutionsDirectory) {
+        Stack<Evolution> app = listApplicationEvolutions(dbName, moduleKey, evolutionsDirectory);
+        Stack<Evolution> db = listDatabaseEvolutions(dbName, moduleKey);
         List<Evolution> downs = new ArrayList<Evolution>();
         List<Evolution> ups = new ArrayList<Evolution>();
 
@@ -456,17 +581,24 @@ public class Evolutions extends PlayPlugin {
         return script;
     }
 
-    public synchronized static Stack<Evolution> listApplicationEvolutions(String moduleKey, VirtualFile evolutionsDirectory) {
+    public synchronized static Stack<Evolution> listApplicationEvolutions(String dBName, String moduleKey, VirtualFile evolutionsDirectory) {
         Stack<Evolution> evolutions = new Stack<Evolution>();
         evolutions.add(new Evolution("", 0, "", "", true));
         if (evolutionsDirectory.exists()) {
             for (File evolution : evolutionsDirectory.getRealFile().listFiles()) {
-                if (evolution.getName().matches("^[0-9]+[.]sql$")) {
+                if (evolution.getName().matches("^"+ dBName + ".[0-9]+[.]sql$") ||
+                        (DB.DEFAULT.equals(dBName) && evolution.getName().matches("^[0-9]+[.]sql$") )) {
                     if (Logger.isTraceEnabled()) {
                         Logger.trace("Loading evolution %s", evolution);
                     }
 
-                    int version = Integer.parseInt(evolution.getName().substring(0, evolution.getName().indexOf(".")));
+                    int version = 0;
+                    if(evolution.getName().contains(dBName)){
+                        version = Integer.parseInt(evolution.getName().substring(evolution.getName().indexOf(".") + 1, evolution.getName().lastIndexOf(".")));
+                    } else {
+                        version = Integer.parseInt(evolution.getName().substring(0, evolution.getName().indexOf(".")));
+                    }
+                    
                     String sql = IO.readContentAsString(evolution);
                     StringBuffer sql_up = new StringBuffer();
                     StringBuffer sql_down = new StringBuffer();
@@ -489,19 +621,12 @@ public class Evolutions extends PlayPlugin {
         }
         return evolutions;
     }
-
-    public synchronized static Stack<Evolution> listDatabaseEvolutions(String moduleKey) {
-        Stack<Evolution> evolutions = new Stack<Evolution>();
-        evolutions.add(new Evolution("", 0, "", "", false));
-        Connection connection = null;
+    
+    private static boolean isEvolutionsTableExist(Connection connection){
+        String tableName = EVOLUTIONS_TABLE_NAME;
         try {
-            connection = EvolutionQuery.getNewConnection();
-            String tableName = "play_evolutions";
-            boolean tableExists = true;
             ResultSet rs = connection.getMetaData().getTables(null, null, tableName, null);
-
             if (!rs.next()) {
-		
                 // Table in lowercase does not exist
                 // oracle gives table names in upper case
                 tableName = tableName.toUpperCase();
@@ -509,16 +634,26 @@ public class Evolutions extends PlayPlugin {
                 rs.close();
                 rs = connection.getMetaData().getTables(null, null, tableName, null);
                 // Does it exist?
-                if (!rs.next() ) {
+                if (!rs.next()) {
                     // did not find it in uppercase either
-                    tableExists = false;
+                    return false;
                 }
             }
+        } catch (SQLException e) {
+            Logger.error(e, "SQL error while checking if play evolutions exist");
+        }
+        return true;     
+    }
 
+    public synchronized static Stack<Evolution> listDatabaseEvolutions(String dbName, String moduleKey) {
+        Stack<Evolution> evolutions = new Stack<Evolution>();
+        evolutions.add(new Evolution("", 0, "", "", false));
+        Connection connection = null;
+        try {
+            connection = EvolutionQuery.getNewConnection(dbName);    
             // Do we have a
-            if (tableExists) {
-                
-                checkAndUpdateEvolutionsForMultiModuleSupport(connection);                    
+            if (isEvolutionsTableExist(connection) ) {           
+                checkAndUpdateEvolutionsForMultiModuleSupport(dbName, connection);                    
 
                 ResultSet databaseEvolutions = EvolutionQuery.getEvolutions(connection, moduleKey);
                                 
@@ -528,7 +663,7 @@ public class Evolutions extends PlayPlugin {
                 }
             
             } else {
-                EvolutionQuery.createTable();
+                EvolutionQuery.createTable(dbName);
             }
         } catch (SQLException e) {
             Logger.error(e, "SQL error while checking play evolutions");
@@ -538,13 +673,13 @@ public class Evolutions extends PlayPlugin {
         Collections.sort(evolutions);
         return evolutions;
     }
-
-    private static void checkAndUpdateEvolutionsForMultiModuleSupport(Connection connection) throws SQLException {
+    
+    private static void checkAndUpdateEvolutionsForMultiModuleSupport(String dbName, Connection connection) throws SQLException {
         ResultSet rs = connection.getMetaData().getColumns(null, null, "play_evolutions", "module_key");
-        if(!rs.next()) {       
-             System.out.println("!!! - Updating the play_evolutions table to cope with multiple modules - !!!");      
-             EvolutionQuery.alterForModuleSupport(connection); 
+        if (!rs.next()) {
+            System.out.println("!!! - Updating the play_evolutions table to cope with multiple modules - !!!");
+            EvolutionQuery.alterForModuleSupport(dbName, connection);
         }
     }
-
+   
 }

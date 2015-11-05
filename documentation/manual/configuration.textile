@@ -237,7 +237,36 @@ You can also set a different date format for specific languages that you have co
 bc. date.format.fr=dd-MM-yyyy
 
 
-h2(#dbconf). Database configuration
+h2(#dbconf). Databases configuration (Single-DB or multi-DB)
+
+You can configure Play to use a single or multiple (separate) databases.
+
+h3. Support for multiple databases
+
+You can specify a specific database or the default configuration. 
+All these parameters can be used to configure a specific database by replacing @db@ by @db.[DB_name]@ where @[DB_name]@ is the name of the database.
+
+The default database is configured by configuration parameters in conf/application.conf whose keys start with ‘db.’ (e.g: db.url). 
+To configure an additional database, add a dot and a suffix (name of the database) to the ‘db’ part of the key, like this:
+
+Example:
+
+@db@ will be replaced by @db.[DB_name]@ where @[DB_name]@ is the name of the database
+@jpa@ will be replaced by @jpa.[DB_name]@ where @[DB_name]@ is the name of the database
+@hibernate@ will be replaced by @hibernate.[DB_name]@ where @[DB_name]@ is the name of the database
+
+This database configuration is now called 'DB_name' in Play. For example, configure DB/JPA/hibernate for this 'DB_name' configuration like this:
+
+Example, with 3 tables "default", "student" and "teacher"
+
+bc. db.default.[param]
+db.student.[param]
+db.teacher.[param]
+
+You can then access this database from your application’s Java by using this name like this:
+
+bc. EntityManager em = JPA.em("student");
+
 
 h3(#db). db
 
@@ -260,8 +289,6 @@ bc. db=java:/comp/env/jdbc/myDatasource@
 If you specify a @Datasource@, the database plugin detects the pattern @db=java:@ and will de-activate the default JDBC system.
 
 Default: none.
-
-See also: "Support for multiple databases":model#multiple.
 
 
 h3(#db.destroyMethod). db.destroyMethod
@@ -401,17 +428,26 @@ h3(#headlessBrowser). headlessBrowser
 
 Specifies the web browser compatibility mode for the HtmlUnit headless web browser used when running @play auto-test@.
 
-bc. headlessBrowser=INTERNET_EXPLORER_7
+bc. headlessBrowser=FIREFOX_31
 
 Values:
 
-* @FIREFOX_3@
-* @FIREFOX_3_6@
-* @INTERNET_EXPLORER_6@
-* @INTERNET_EXPLORER_7@
+* @CHROME@
+* @FIREFOX_24@
 * @INTERNET_EXPLORER_8@
+* @INTERNET_EXPLORER_11@
 
-Default: @INTERNET_EXPLORER_8@
+Default: @FIREFOX_31@
+
+h3(#webclient.timeout). webclient.timeout
+
+Specifies the timeout of the WebConnection. Set to zero for an infinite wait.
+
+Note: The timeout is used twice. The first is for making the socket connection, the second is for data retrieval. If the time is critical you must allow for twice the time specified here.
+
+bc. webclient.timeout=60
+
+This value can be set directly in the command @play auto-test@ by adding @--timeout=60@
 
 
 h2(#hibernate). Hibernate
@@ -419,8 +455,6 @@ h2(#hibernate). Hibernate
 You can specify additional Hibernate properties. For example, to enable SQL comments:
 
 bc. hibernate.use_sql_comments=true
-
-See also: "Using JPA with multiple databases":jpa#multiple.
 
 
 h3(#hibernate.connection.datasource). hibernate.connection.datasource
@@ -562,6 +596,31 @@ Default: @1.6@
 
 h2(#jpa). JPA
 
+You can configure Play to use a single or multiple (separate) databases.
+
+h3. Support for multiple databases
+
+You can specify a specific database or the default configuration. 
+All these parameters can be used to configure a specific database by replacing @db@ by @db.[DB_name]@ where @[DB_name]@ is the name of the database.
+
+The default database is configured by configuration parameters in conf/application.conf whose keys start with ‘jpa.’ (e.g: db.url). 
+To configure an additional database, add a dot and a suffix (name of the database) to the ‘jpa’ part of the key, like this:
+
+Example:
+
+@jpa@ will be replaced by @jpa.[DB_name]@ where @[DB_name]@ is the name of the database
+
+This database configuration is now called 'DB_name' in Play. For example, configure JPA for this 'DB_name' configuration like this:
+
+Example, with 3 tables "default", "student" and "teacher"
+
+bc. jpa.default.[param]
+jpa.student.[param]
+jpa.teacher.[param]
+
+You can then access this database from your application’s Java by using this name like this:
+
+bc. EntityManager em = JPA.em("student");
 
 h3(#jpa.dialect). jpa.dialect
 
@@ -899,6 +958,22 @@ bc. ssl.KeyManagerFactory.algorithm=SunX509
 
 Default: @SunX509@
 
+h2(#keystores). Custom key stores
+
+Allows for custom SSL certificates to be used with connection initiated through WebServices
+
+h3(#ssl.keyStore). ssl.Keystore
+
+The custom keystore that should be added to Play! WebServices connections
+
+h3(#ssl.keyStorePassword). ssl.keyStorePassword
+
+The password neede to access the keys inside the keystore. This is required.
+
+h3(#ssl.cavalidation). ssl.cavalidation
+
+If set to true, the CA chain is validated upon connection.
+
 
 h2(#trustmanager). trustmanager
 
@@ -917,6 +992,15 @@ Values - ‘standard names’ from the JDK Security API:
 
 Default: @JKS@
 
+bc. play.netty.clientAuth
+
+Values 
+
+* @want@ Controls whether accepted server-mode SSLSockets will be initially configured to request client authentication. 
+* @need@ Controls whether accepted server-mode SSLSockets will be initially configured to require client authentication.
+* @none@ None of the above
+
+Default: @none@
 
 h2(#upload). File upload
 
@@ -950,6 +1034,15 @@ h3(#XForwardedSupport). XForwardedSupport
 A comma-separated list of IP addresses that are allowed @X-Forwarded-For@ HTTP request header values, used to restrict local addresses when an @X-Forwarded-For@ request header is set by a proxy server. Alternatively you can use 'ALL' if you do not want to restrict local addresses. **Note**: only use 'ALL' if you are very sure that if it safe to do so (e.g. you have a proper firewall in place that blocks public requests). A valid use-case would be when using Play! behind a Amazon ELB loadbalancer, which internal IP's tend to change over time.      
 
 Default: @127.0.0.1@
+
+h3(#XForwardedOverwriteDomainAndPort). XForwardedOverwriteDomainAndPort
+
+Set to true to restore the request domain and port to original domain and port.
+
+For example:
+
+bc. XForwardedOverwriteDomainAndPort=true
+
 
 h2(#enhancers). Enhancers
 

@@ -648,6 +648,9 @@ def bootstrapWorkingDirectory( folder ):
 
 def callPlay(self, args):
     play_script = os.path.join(self.working_directory, '../../../play')
+    if sys.platform.startswith('win32'):
+        play_script += "".join('.bat')
+        
     process_args = [play_script] + args
     play_process = subprocess.Popen(process_args,stdout=subprocess.PIPE)
     return play_process
@@ -662,7 +665,7 @@ def waitForWithFail(process, pattern, failPattern):
     timer = threading.Timer(90, timeout, [process])
     timer.start()
     while True:
-        sys.stdout.flush()
+	sys.stdout.flush()
         line = process.stdout.readline().strip()
 	sys.stdout.flush()
         #print timeoutOccured

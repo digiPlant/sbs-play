@@ -97,7 +97,6 @@ bc. public static void hello(String user) {
     renderText(Messages.get("hello", user));
 }
 
-
 h3(#template). Template output
 
 From a template you can use the special @&{…}@ syntax to display localized messages:

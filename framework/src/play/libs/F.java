@@ -17,12 +17,21 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import org.jboss.netty.channel.ChannelHandlerContext;
 
 import org.jboss.netty.channel.ChannelHandlerContext;
 
 import play.Logger;
 
 public class F {
+
+
+    /**
+     * A Function with no arguments.
+     */
+    public static interface Function0<R> {
+        public R apply() throws Throwable;
+    }
 
     public static class Promise<V> implements Future<V>, F.Action<V> {
 

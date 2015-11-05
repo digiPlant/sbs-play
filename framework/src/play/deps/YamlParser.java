@@ -51,7 +51,9 @@ public class YamlParser extends AbstractModuleDescriptorParser {
 
     public boolean accept(Resource rsrc) {
         return rsrc.exists() && rsrc.getName().endsWith(".yml");
-    } 
+    }
+    
+    
     
     public ModuleDescriptor parseDescriptor(ParserSettings ps, URL url, Resource rsrc, boolean bln) throws ParseException, IOException {
         try {
@@ -354,9 +356,10 @@ public class YamlParser extends AbstractModuleDescriptorParser {
                }
             }
         }
+
         return null;
+
     }
-    
     private static class ModuleFilter implements FilenameFilter {
 
         private ModuleRevisionId moduleRevision;
@@ -364,6 +367,7 @@ public class YamlParser extends AbstractModuleDescriptorParser {
         public ModuleFilter(ModuleRevisionId moduleRevision) {
             this.moduleRevision = moduleRevision;
         }
+
         @Override
         public boolean accept(File dir, String name) {
             // Accept module with the same name or with a version number

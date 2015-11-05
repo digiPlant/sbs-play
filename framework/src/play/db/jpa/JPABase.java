@@ -1,6 +1,5 @@
 package play.db.jpa;
 
-import org.hibernate.Session;
 import org.hibernate.collection.spi.PersistentCollection;
 import org.hibernate.collection.internal.PersistentMap;
 import org.hibernate.engine.spi.*;
@@ -28,26 +27,12 @@ import java.util.*;
  */
 @MappedSuperclass
 public class JPABase implements Serializable, play.db.Model {
-    
-    private transient JPAConfig _jpaConfig = null;
 
-    public JPAContext getJPAContext() {
-        if (_jpaConfig==null) {
-            _jpaConfig = getJPAConfig(getClass());
-        }
-        return _jpaConfig.getJPAContext();
-    }
-
-    /**
-     * Returns the correct JPAConfig used to manage this entity-class
-     */
-    public static JPAConfig getJPAConfig(Class clazz) {
-        return JPA.getJPAConfig( Entity2JPAConfigResolver.getJPAConfigNameForEntityClass(clazz));
-    }
-
+   
     public void _save() {
-        if (!em().contains(this)) {
-            em().persist(this);
+        String dbName = JPA.getDBName(this.getClass());
+        if (!em(dbName).contains(this)) {
+            em(dbName).persist(this);
             PlayPlugin.postEvent("JPASupport.objectPersisted", this);
         }
         avoidCascadeSaveLoops.set(new HashSet<JPABase>());
@@ -57,7 +42,7 @@ public class JPABase implements Serializable, play.db.Model {
             avoidCascadeSaveLoops.get().clear();
         }
         try {
-            em().flush();
+            em(dbName).flush();
         } catch (PersistenceException e) {
             if (e.getCause() instanceof GenericJDBCException) {
                 throw new PersistenceException(((GenericJDBCException) e.getCause()).getSQL(), e);
@@ -74,6 +59,8 @@ public class JPABase implements Serializable, play.db.Model {
     }
 
     public void _delete() {
+        String dbName = JPA.getDBName(this.getClass());
+         
         try {
             avoidCascadeSaveLoops.set(new HashSet<JPABase>());
             try {
@@ -81,9 +68,9 @@ public class JPABase implements Serializable, play.db.Model {
             } finally {
                 avoidCascadeSaveLoops.get().clear();
             }
-            em().remove(this);
+            em(dbName).remove(this);
             try {
-                em().flush();
+                em(dbName).flush();
             } catch (PersistenceException e) {
                 if (e.getCause() instanceof GenericJDBCException) {
                     throw new PersistenceException(((GenericJDBCException) e.getCause()).getSQL(), e);
@@ -197,8 +184,10 @@ public class JPABase implements Serializable, play.db.Model {
         }
     }
 
-    private static void cascadeOrphans(JPABase base, PersistentCollection persistentCollection, boolean willBeSaved) {
-        SessionImpl session = ((SessionImpl) JPA.em().getDelegate());
+    private void cascadeOrphans(JPABase base, PersistentCollection persistentCollection, boolean willBeSaved) {
+        String dbName = JPA.getDBName(this.getClass());
+        
+        SessionImpl session = ((SessionImpl) JPA.em(dbName).getDelegate());
         PersistenceContext pc = session.getPersistenceContext();
         CollectionEntry ce = pc.getCollectionEntry(persistentCollection);
 
@@ -241,12 +230,20 @@ public class JPABase implements Serializable, play.db.Model {
      *
      * @return the current entityManager
      */
-    public EntityManager em() {
-        return getJPAContext().em();
+    public static EntityManager em(String name) {
+        return JPA.em(name);
+    }
+
+     public static EntityManager em() {
+        return JPA.em();
+    }
+
+    public boolean isPersistent(String name) {
+        return JPA.em(name).contains(this);
     }
 
     public boolean isPersistent() {
-        return em().contains(this);
+        return JPA.em().contains(this);
     }
 
     /**

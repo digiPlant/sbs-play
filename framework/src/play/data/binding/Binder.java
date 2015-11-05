@@ -55,6 +55,16 @@ public abstract class Binder {
         supportedTypes.put(clazz, typeBinder);
     }
 
+    static Map<Class<?>, BeanWrapper> beanwrappers = new HashMap<Class<?>, BeanWrapper>();
+
+    static BeanWrapper getBeanWrapper(Class<?> clazz) {
+        if (!beanwrappers.containsKey(clazz)) {
+            BeanWrapper beanwrapper = new BeanWrapper(clazz);
+            beanwrappers.put(clazz, beanwrapper);
+        }
+        return beanwrappers.get(clazz);
+    }
+
     public static class MethodAndParamInfo {
         public final Object objectInstance;
         public final Method method;
@@ -184,7 +194,7 @@ public abstract class Binder {
             }
 
             Object directBindResult = internalDirectBind(paramNode.getOriginalKey(), bindingAnnotations.annotations, paramNode.getFirstValue(clazz), clazz, type);
-
+            
             if (directBindResult != DIRECTBINDING_NO_RESULT) {
                 // we found a value/result when direct binding
                 return directBindResult;
@@ -194,14 +204,12 @@ public abstract class Binder {
             if (clazz.isArray()) {
                 return bindArray(clazz, paramNode, bindingAnnotations);
             }
-
+			
 			if (!paramNode.getAllChildren().isEmpty()) {
 	        	return internalBindBean(clazz, paramNode, bindingAnnotations);
 	        }
 
             return null; // give up
-        } catch (BinderException e) {
-            throw e; // allow binder to throw an exception that propagates
         } catch (Exception e) {
             Validation.addError(paramNode.getOriginalKey(), "validation.invalid");
         }
@@ -306,7 +314,7 @@ public abstract class Binder {
 
     private static void internalBindBean(ParamNode paramNode, Object bean, BindingAnnotations bindingAnnotations) throws Exception {
 
-        BeanWrapper bw = BeanWrapper.forClass(bean.getClass());
+        BeanWrapper bw = getBeanWrapper(bean.getClass());
         for (BeanWrapper.Property prop : bw.getWrappers()) {
             ParamNode propParamNode = paramNode.getChild(prop.getName());
             if (propParamNode != null) {

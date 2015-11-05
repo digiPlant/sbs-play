@@ -1,6 +1,7 @@
 package play;
 
 import java.lang.annotation.Annotation;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -10,18 +11,19 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-
-import com.jamonapi.Monitor;
-import com.jamonapi.MonitorFactory;
-import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import play.Play.Mode;
+import play.classloading.enhancers.LocalvariablesNamesEnhancer.LocalVariablesNamesTracer;
 import play.exceptions.PlayException;
 import play.exceptions.UnexpectedException;
 import play.i18n.Lang;
 import play.libs.F;
 import play.libs.F.Promise;
 import play.utils.PThreadFactory;
+
+import com.jamonapi.Monitor;
+import com.jamonapi.MonitorFactory;
 
 /**
  * Run some code in a Play! context
@@ -222,6 +224,7 @@ public class Invoker {
          */
         public void after() {
             Play.pluginCollection.afterInvocation();
+            LocalVariablesNamesTracer.checkEmpty(); // detect bugs ....
         }
 
         /**
@@ -262,6 +265,13 @@ public class Invoker {
             InvocationContext.current.remove();
         }
 
+        private void withinFilter(play.libs.F.Function0<Void> fct) throws Throwable {
+          for( PlayPlugin plugin :  Play.pluginCollection.getEnabledPlugins() ) {
+               if (plugin.getFilter() != null)
+                plugin.getFilter().withinFilter(fct);
+           }
+        }
+
         /**
          * It's time to execute.
          */
@@ -273,7 +283,18 @@ public class Invoker {
                 preInit();
                 if (init()) {
                     before();
-                    execute();
+                    final AtomicBoolean executed = new AtomicBoolean(false);
+                    this.withinFilter(new play.libs.F.Function0<Void>() {
+                        public Void apply() throws Throwable {
+                            executed.set(true);
+                            execute();
+                            return null;
+                        }
+                    });
+                    // No filter function found => we need to execute anyway( as before the use of withinFilter )
+                    if (!executed.get()) {
+                        execute();
+                    }
                     after();
                     onSuccess();
                 }

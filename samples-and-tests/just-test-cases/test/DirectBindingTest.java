@@ -7,9 +7,6 @@ import static play.data.binding.Binder.directBind;
 
 import models.*;
 
-import play.exceptions.BinderException;
-import utils.ExceptionThrowingSubject;
-
 public class DirectBindingTest extends UnitTest {
     
     @Test
@@ -151,12 +148,6 @@ public class DirectBindingTest extends UnitTest {
         assertTrue(directBind("on", Boolean.class).equals(true));
         assertTrue(directBind("yes", Boolean.class).equals(true));
     }
-
-    @Test(expected = BinderException.class)
-    public void testExceptionThrowingBinder() throws Exception  {
-        directBind("invalid data", ExceptionThrowingSubject.class);
-    }
-
     
     @Test
     public void testLocale() throws Exception  {

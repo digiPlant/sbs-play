@@ -146,7 +146,7 @@ public class Play {
      * Readonly list containing currently enabled plugins.
      * This list is updated from pluginCollection when pluginCollection is modified
      * Play plugins
-     * @deprecated Use pluginCollection instead.
+     * Use pluginCollection instead.
      */
     @Deprecated
     public static List<PlayPlugin> plugins = pluginCollection.getEnabledPlugins();
@@ -169,6 +169,7 @@ public class Play {
      * Lazy load the templates on demand
      */
     public static boolean lazyLoadTemplates = false;
+
     /**
      * This is used as default encoding everywhere related to the web: request, response, WS
      */
@@ -207,7 +208,7 @@ public class Play {
         String logLevel = configuration.getProperty("application.log", "INFO");
 
         //only override log-level if Logger was not configured manually
-        if (!Logger.configuredManually) {
+        if( !Logger.configuredManually) {
             Logger.setUp(logLevel);
         }
         Logger.recordCaller = Boolean.parseBoolean(configuration.getProperty("application.log.recordCaller", "false"));
@@ -295,7 +296,7 @@ public class Play {
 
         // Default cookie domain
         Http.Cookie.defaultDomain = configuration.getProperty("application.defaultCookieDomain", null);
-        if (Http.Cookie.defaultDomain != null) {
+        if (Http.Cookie.defaultDomain!=null) {
             Logger.info("Using default cookie domain: " + Http.Cookie.defaultDomain);
         }
 
@@ -488,7 +489,7 @@ public class Play {
             // Configure logs
             String logLevel = configuration.getProperty("application.log", "INFO");
             //only override log-level if Logger was not configured manually
-            if (!Logger.configuredManually) {
+            if( !Logger.configuredManually) {
                 Logger.setUp(logLevel);
             }
             Logger.recordCaller = Boolean.parseBoolean(configuration.getProperty("application.log.recordCaller", "false"));
@@ -510,13 +511,13 @@ public class Play {
 
             // Default web encoding
             String _defaultWebEncoding = configuration.getProperty("application.web_encoding");
-            if (_defaultWebEncoding != null) {
+            if( _defaultWebEncoding != null ) {
                 Logger.info("Using custom default web encoding: " + _defaultWebEncoding);
                 defaultWebEncoding = _defaultWebEncoding;
                 // Must update current response also, since the request/response triggering
                 // this configuration-loading in dev-mode have already been
                 // set up with the previous encoding
-                if (Http.Response.current() != null) {
+                if( Http.Response.current() != null ) {
                     Http.Response.current().encoding = _defaultWebEncoding;
                 }
             }
@@ -558,11 +559,11 @@ public class Play {
 
         } catch (PlayException e) {
             started = false;
-            try { Cache.stop(); } catch(Exception ignored) {}
+            try { Cache.stop(); } catch (Exception ignored) {}
             throw e;
         } catch (Exception e) {
             started = false;
-            try { Cache.stop(); } catch(Exception ignored) {}
+            try { Cache.stop(); } catch (Exception ignored) {}
             throw new UnexpectedException(e);
         }
     }
@@ -655,7 +656,7 @@ public class Play {
 
     @SuppressWarnings("unchecked")
     public static <T> T plugin(Class<T> clazz) {
-        return (T) pluginCollection.getPluginInstance((Class<? extends PlayPlugin>) clazz);
+        return (T)pluginCollection.getPluginInstance((Class<? extends PlayPlugin>)clazz);
     }
 
 
@@ -735,7 +736,7 @@ public class Play {
 			    DependenciesManager dm = new DependenciesManager(applicationPath, frameworkPath, userHome);
 				modules = dm.retrieveModules();
 			} catch (Exception e) {
-				Logger.error("There was a problem parsing depencies.yml (module will not be loaded in order of the dependencies.yml)", e);
+				Logger.error("There was a problem parsing dependencies.yml (module will not be loaded in order of the dependencies.yml)", e);
 				// Load module without considering the dependencies.yml order
 				modules.addAll(Arrays.asList(localModules.list()));		
 			}
@@ -752,7 +753,7 @@ public class Play {
 				if(module == null || !module.exists()){
 				        Logger.error("Module %s will not be loaded because %s does not exist", moduleName, module.getAbsolutePath());
 				} else if (module.isDirectory()) {
-                                        addModule(appRoot, moduleName, module);
+					addModule(appRoot, moduleName, module);
 				} else {
 					File modulePath = new File(IO.readContentAsString(module).trim());
 					if (!modulePath.exists() || !modulePath.isDirectory()) {
@@ -765,7 +766,7 @@ public class Play {
 		}
 
         // Auto add special modules
-        if (Play.runningInTestMode()) {
+        if (Play.runingInTestMode()) {
             addModule(appRoot, "_testrunner", new File(Play.frameworkPath, "modules/testrunner"));
         }
 
@@ -835,16 +836,17 @@ public class Play {
     }
 
     /**
-     * Returns true if application is running in test-mode.
+     * Returns true if application is runing in test-mode.
      * Test-mode is resolved from the framework id.
      *
      * Your app is running in test-mode if the framwork id (Play.id)
      * is 'test' or 'test-?.*'
      * @return true if testmode
      */
-    public static boolean runningInTestMode() {
+    public static boolean runingInTestMode(){
         return id.matches("test|test-?.*");
     }
+    
 
     /**
      * Call this method when there has been a fatal error that Play cannot recover from

@@ -20,7 +20,8 @@ import org.apache.commons.mail.*;
 
 import play.Logger;
 import play.Play;
-import play.classloading.enhancers.LVEnhancer.LVEnhancerRuntime;
+import play.classloading.enhancers.LocalvariablesNamesEnhancer.LocalVariablesNamesTracer;
+import play.classloading.enhancers.LocalvariablesNamesEnhancer.LocalVariablesSupport;
 import play.exceptions.MailException;
 import play.exceptions.TemplateNotFoundException;
 import play.exceptions.UnexpectedException;
@@ -39,7 +40,7 @@ import play.libs.F.T4;
 /**
  * Application mailer support
  */
-public class Mailer {
+public class Mailer implements LocalVariablesSupport {
 
     protected static ThreadLocal<HashMap<String, Object>> infos = new ThreadLocal<HashMap<String, Object>>();
 
@@ -135,7 +136,6 @@ public class Mailer {
         infos.set(map);
     }
     
-    @SuppressWarnings("unchecked")
     public static void attachDataSource(DataSource dataSource, String name, String description){
        attachDataSource(dataSource, name, description, EmailAttachment.ATTACHMENT);
     }
@@ -399,18 +399,19 @@ public class Mailer {
             templateName = templateName.substring(0, templateName.indexOf("("));
             templateName = templateName.replace(".", "/");
 
-            String[] names = LVEnhancerRuntime.getParamNames().mergeParamsAndVarargs();
-            
             // overrides Template name
-            if (args.length > 0 && args[0] instanceof String && names[0] == null) {
+            if (args.length > 0 && args[0] instanceof String && LocalVariablesNamesTracer.getAllLocalVariableNames(args[0]).isEmpty()) {
                 templateName = args[0].toString();
             }
 
             final Map<String, Object> templateHtmlBinding = new HashMap<String, Object>();
             final Map<String, Object> templateTextBinding = new HashMap<String, Object>();
-            for (int i = 0; i < names.length; i++) {
-                templateHtmlBinding.put(names[i], args[i]);
-                templateTextBinding.put(names[i], args[i]);
+            for (Object o : args) {
+                List<String> names = LocalVariablesNamesTracer.getAllLocalVariableNames(o);
+                for (String name : names) {
+                    templateHtmlBinding.put(name, o);
+                    templateTextBinding.put(name, o);
+                }
             }
 
             // The rule is as follow: If we ask for text/plain, we don't care about the HTML
