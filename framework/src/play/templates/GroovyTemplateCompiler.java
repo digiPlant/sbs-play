@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
  */
 public class GroovyTemplateCompiler extends TemplateCompiler {
 
-    public static List<String> extensionsClassnames = new ArrayList<String>();
+    protected List<String> extensionsClassnames = new ArrayList<String>();
 
     // [#714] The groovy-compiler complaints if a line is more than 65535 unicode units long..
     // Have to split it if it is really that big
