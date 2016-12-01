@@ -1,11 +1,10 @@
 .git/
+.DS_Store
 documentation/
 framework/test-src/
-samples-and-tests/
 support/
 python/*.dll
 python/python.*
-.DS_Store
 .travis.yml
 COPYING
 play.bat
