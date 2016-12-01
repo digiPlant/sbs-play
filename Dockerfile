@@ -13,13 +13,19 @@ RUN apk del --purge build-dependencies \
 RUN mkdir -p /app
 
 # Add playframework to image
-ADD . /opt/play
+COPY . /opt/play
 
 # Add play to path so that the "play" command is available
 ENV PATH /opt/play:$PATH
 
 WORKDIR /app
 
+# Play default port
 EXPOSE 9000
 
-CMD ["play", "version"]
+# Debug port
+EXPOSE 8000
+
+ENTRYPOINT ["play"]
+
+CMD ["help"]
