@@ -401,17 +401,26 @@ h3(#headlessBrowser). headlessBrowser
 
 Specifies the web browser compatibility mode for the HtmlUnit headless web browser used when running @play auto-test@.
 
-bc. headlessBrowser=INTERNET_EXPLORER_7
+bc. headlessBrowser=FIREFOX_31
 
 Values:
 
-* @FIREFOX_3@
-* @FIREFOX_3_6@
-* @INTERNET_EXPLORER_6@
-* @INTERNET_EXPLORER_7@
+* @CHROME@
+* @FIREFOX_24@
 * @INTERNET_EXPLORER_8@
+* @INTERNET_EXPLORER_11@
 
-Default: @INTERNET_EXPLORER_8@
+Default: @FIREFOX_31@
+
+h3(#webclient.timeout). webclient.timeout
+
+Specifies the timeout of the WebConnection. Set to zero for an infinite wait.
+
+Note: The timeout is used twice. The first is for making the socket connection, the second is for data retrieval. If the time is critical you must allow for twice the time specified here.
+
+bc. webclient.timeout=60
+
+This value can be set directly in the command @play auto-test@ by adding @--timeout=60@
 
 
 h2(#hibernate). Hibernate
@@ -553,11 +562,11 @@ h3(#java.source). java.source
 
 Java source level, which overrides the @java.version@ system property. For example:
 
-bc. java.source=1.6
+bc. java.source=1.7
 
-Values:  @1.5@, @1.6@, @1.7@ (experimental).
+Values:  @1.5@ (No longer supported since 1.3.0), @1.6@, @1.7@, @1.8@ (experimental).
 
-Default: @1.5@
+Default: @1.6@
 
 
 h2(#jpa). JPA
@@ -951,4 +960,21 @@ A comma-separated list of IP addresses that are allowed @X-Forwarded-For@ HTTP r
 
 Default: @127.0.0.1@
 
+h3(#XForwardedOverwriteDomainAndPort). XForwardedOverwriteDomainAndPort
 
+Set to true to restore the request domain and port to original domain and port.
+
+For example:
+
+bc. XForwardedOverwriteDomainAndPort=true
+
+
+h2(#enhancers). Enhancers
+
+h3(#play.propertiesEnhancer.enabled). play.propertiesEnhancer.enabled
+
+Used to disable play enhancing of play class (can be used to switch off getter/setter generation). For example:
+
+bc. play.propertiesEnhancer.enabled=false
+
+Default: @true@

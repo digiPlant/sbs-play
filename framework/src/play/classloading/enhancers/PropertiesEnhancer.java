@@ -31,6 +31,8 @@ public class PropertiesEnhancer extends Enhancer {
     @Override
     public void enhanceThisClass(ApplicationClass applicationClass) throws Exception {
 
+        if(!Boolean.parseBoolean(Play.configuration.getProperty("play.propertiesEnhancer.enabled", "true"))) return;
+
         final CtClass ctClass = makeClass(applicationClass);
         if (ctClass.isInterface()) {
             return;
@@ -144,6 +146,7 @@ public class PropertiesEnhancer extends Enhancer {
 
                             // Getter or setter ?
                             String propertyName = null;
+                                                        
                             if (fieldAccess.getField().getDeclaringClass().equals(ctMethod.getDeclaringClass())
                                 || ctMethod.getDeclaringClass().subclassOf(fieldAccess.getField().getDeclaringClass())) {
                                 if ((ctMethod.getName().startsWith("get") || (!isFinal(fieldAccess.getField()) && ctMethod.getName().startsWith("set"))) && ctMethod.getName().length() > 3) {

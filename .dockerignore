@@ -1,0 +1,11 @@
+.git/
+.DS_Store
+documentation/
+framework/test-src/
+support/
+python/*.dll
+python/python.*
+.travis.yml
+COPYING
+play.bat
+README.textile

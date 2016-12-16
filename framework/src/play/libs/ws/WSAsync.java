@@ -1,5 +1,6 @@
 package play.libs.ws;
 
+import java.nio.charset.Charset;
 import com.ning.http.client.*;
 import com.ning.http.client.AsyncHttpClient.BoundRequestBuilder;
 import com.ning.http.client.AsyncHttpClientConfig.Builder;
@@ -28,6 +29,9 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.*;
+import com.ning.http.client.multipart.ByteArrayPart;
+import com.ning.http.client.multipart.FilePart;
+import com.ning.http.client.multipart.Part;
 
 /**
  * Simple HTTP client to make webservices requests.
@@ -84,7 +88,7 @@ public class WSAsync implements WSImpl {
         }
         // when using raw urls, AHC does not encode the params in url.
         // this means we can/must encode it(with correct encoding) before passing it to AHC
-        confBuilder.setUseRawUrl(true);
+        confBuilder.setDisableUrlEncodingForBoundedRequests(true);
         httpClient = new AsyncHttpClient(confBuilder.build());
     }
 
@@ -159,9 +163,9 @@ public class WSAsync implements WSImpl {
                         }
 
                         if (value == null) {
-                            requestBuilder.addQueryParameter(URLEncoder.encode(name, encoding), null);
+                            requestBuilder.addQueryParam(URLEncoder.encode(name, encoding), null);
                         } else {
-                            requestBuilder.addQueryParameter(URLEncoder.encode(name, encoding), URLEncoder.encode(value, encoding));
+                            requestBuilder.addQueryParam(URLEncoder.encode(name, encoding), URLEncoder.encode(value, encoding));
                         }
 
                     }
@@ -367,9 +371,10 @@ public class WSAsync implements WSImpl {
                 builder.addHeader(key, headers.get(key));
             }
             builder.setFollowRedirects(this.followRedirects);
-            PerRequestConfig perRequestConfig = new PerRequestConfig();
-            perRequestConfig.setRequestTimeoutInMs(this.timeout * 1000);
-            builder.setPerRequestConfig(perRequestConfig);
+            builder.setRequestTimeout(this.timeout * 1000);
+            if (this.virtualHost != null) {
+                builder.setVirtualHost(this.virtualHost);
+            }
             return builder;
         }
 
@@ -404,7 +409,8 @@ public class WSAsync implements WSImpl {
                     builder.addBodyPart(new FilePart(this.fileParams[i].paramName,
                             this.fileParams[i].file,
                             MimeTypes.getMimeType(this.fileParams[i].file.getName()),
-                            encoding));
+                            Charset.forName(encoding)
+                            ));
                 }
                 if (this.parameters != null) {
                     try {
@@ -414,11 +420,11 @@ public class WSAsync implements WSImpl {
                             if (value instanceof Collection<?> || value.getClass().isArray()) {
                                 Collection<?> values = value.getClass().isArray() ? Arrays.asList((Object[]) value) : (Collection<?>) value;
                                 for (Object v : values) {
-                                    Part part = new ByteArrayPart(key, null, v.toString().getBytes(encoding), "text/plain", encoding);
+                                    Part part = new ByteArrayPart(key, v.toString().getBytes(encoding), "text/plain", Charset.forName(encoding), null);
                                     builder.addBodyPart( part );
                                 }
                             } else {
-                                Part part = new ByteArrayPart(key, null, value.toString().getBytes(encoding), "text/plain", encoding);
+                                Part part = new ByteArrayPart(key, value.toString().getBytes(encoding), "text/plain", Charset.forName(encoding), null);
                                 builder.addBodyPart( part );
                             }
                         }
@@ -465,10 +471,9 @@ public class WSAsync implements WSImpl {
                         }
                     }
                     try {
-                        byte[] bodyBytes = sb.toString().getBytes( this.encoding );
-                        InputStream bodyInStream = new ByteArrayInputStream( bodyBytes );
-                        builder.setBody( bodyInStream );
-                    } catch ( UnsupportedEncodingException e) {
+                        byte[] bodyBytes = sb.toString().getBytes(this.encoding);
+                        builder.setBody(bodyBytes);
+                    } catch (UnsupportedEncodingException e) {
                         throw new RuntimeException(e);
                     }
 
@@ -482,11 +487,11 @@ public class WSAsync implements WSImpl {
                             Collection<?> values = value.getClass().isArray() ? Arrays.asList((Object[]) value) : (Collection<?>) value;
                             for (Object v: values) {
                                 // must encode it since AHC uses raw urls
-                                builder.addQueryParameter(encode(key), encode(v.toString()));
+                                builder.addQueryParam(encode(key), encode(v.toString()));
                             }
                         } else {
                             // must encode it since AHC uses raw urls
-                            builder.addQueryParameter(encode(key), encode(value.toString()));
+                            builder.addQueryParam(encode(key), encode(value.toString()));
                         }
                     }
                     setResolvedContentType("text/html; charset=" + encoding);
@@ -496,14 +501,13 @@ public class WSAsync implements WSImpl {
                 if (this.parameters != null && !this.parameters.isEmpty()) {
                     throw new RuntimeException("POST or PUT method with parameters AND body are not supported.");
                 }
-                if(this.body instanceof InputStream) {
+                if (this.body instanceof InputStream) {
                     builder.setBody((InputStream)this.body);
                 } else {
                     try {
-                        byte[] bodyBytes = this.body.toString().getBytes( this.encoding );
-                        InputStream bodyInStream = new ByteArrayInputStream( bodyBytes );
-                        builder.setBody( bodyInStream );
-                    } catch ( UnsupportedEncodingException e) {
+                        byte[] bodyBytes = this.body.toString().getBytes(this.encoding);
+                        builder.setBody(bodyBytes);
+                    } catch (UnsupportedEncodingException e) {
                         throw new RuntimeException(e);
                     }
                 }
