@@ -1,5 +1,7 @@
 package play.db.jpa;
 
+
+import javax.persistence.GenerationType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
 import javax.persistence.MappedSuperclass;
@@ -12,7 +14,7 @@ import javax.persistence.MappedSuperclass;
 public class Model extends GenericModel {
 
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
     public Long getId() {
