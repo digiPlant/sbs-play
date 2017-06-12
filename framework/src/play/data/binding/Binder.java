@@ -10,6 +10,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.text.ParseException;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -31,6 +32,7 @@ import org.joda.time.DateTime;
 
 import play.Logger;
 import play.Play;
+import play.i18n.Lang;
 import play.data.Upload;
 import play.data.binding.types.BinaryBinder;
 import play.data.binding.types.ByteArrayArrayBinder;
@@ -124,6 +126,23 @@ public abstract class Binder {
             this.method = method;
             this.parameterIndex = parameterIndex;
         }
+    }
+
+    /**
+     * This method is called when binding numbers, it normalizes the dot notation according to the locale
+     *
+     * @param value the string number value
+     * @return a normalized string
+     */
+    static String fixNumberInput(String value) {
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols(new Locale(Lang.get()));
+        String numberGroupingChar = "" + symbols.getGroupingSeparator();
+        String decimalChar = "" + symbols.getDecimalSeparator();
+        if (value.contains(numberGroupingChar)) value = value.replace(numberGroupingChar, "");
+        if (value.contains(decimalChar)) value = value.replace(decimalChar, ".");
+        if (value.contains(" ")) value = value.replace(" ", "");
+        if (value.contains(",")) value = value.replace(",", ".");
+        return value;
     }
 
     /**
@@ -765,6 +784,8 @@ public abstract class Binder {
                 return clazz.isPrimitive() ? 0 : null;
             }
 
+            value = fixNumberInput(value);
+
             return Integer.parseInt(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
 
@@ -773,6 +794,8 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0l : null;
             }
+
+            value = fixNumberInput(value);
 
             return Long.parseLong(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
@@ -792,6 +815,8 @@ public abstract class Binder {
                 return clazz.isPrimitive() ? (short) 0 : null;
             }
 
+            value = fixNumberInput(value);
+
             return Short.parseShort(value.contains(".") ? value.substring(0, value.indexOf(".")) : value);
         }
 
@@ -801,6 +826,8 @@ public abstract class Binder {
                 return clazz.isPrimitive() ? 0f : null;
             }
 
+            value = fixNumberInput(value);
+
             return Float.parseFloat(value);
         }
 
@@ -809,6 +836,8 @@ public abstract class Binder {
             if (nullOrEmpty) {
                 return clazz.isPrimitive() ? 0d : null;
             }
+
+            value = fixNumberInput(value);
 
             return Double.parseDouble(value);
         }
