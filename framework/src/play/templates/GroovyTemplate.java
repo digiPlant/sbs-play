@@ -494,10 +494,13 @@ public class GroovyTemplate extends BaseTemplate {
         }
 
         public String __getMessage(Object[] val) {
-            if (val == null) {
-                throw new NullPointerException("You are trying to resolve a message with an expression " + "that is resolved to null - "
-                        + "have you forgotten quotes around the message-key?");
-            }
+			/*
+			@fix Removed so that we don't get a null pointer.
+			if (val == null) {
+				throw new NullPointerException("You are trying to resolve a message with an expression " + "that is resolved to null - "
+						+ "have you forgotten quotes around the message-key?");
+			}
+			*/
             if (val.length == 1) {
                 return Messages.get(val[0]);
             } else {
@@ -526,7 +529,7 @@ public class GroovyTemplate extends BaseTemplate {
             if (val instanceof RawData) {
                 return ((RawData) val).data;
             }
-            if (!template.name.endsWith(".html") || TagContext.hasParentTag("verbatim")) {
+            if (!template.name.endsWith(".html") || TagContext.hasParentTag("verbatim") || !Play.configuration.getProperty("future.escapeInTemplates", "false").equals("true")) { // re-instated setting to save the day if updating old app before going through templates (.raw())
                 return stringValue;
             }
             return HTML.htmlEscape(stringValue);
