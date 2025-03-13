@@ -10,9 +10,10 @@ public class PThreadFactory implements ThreadFactory {
     final String namePrefix;
 
     public PThreadFactory(String poolName) {
-        SecurityManager s = System.getSecurityManager();
-        group = (s != null) ? s.getThreadGroup() : Thread.currentThread().getThreadGroup();
-        namePrefix = poolName + "-thread-";
+        //SecurityManager s = System.getSecurityManager(); // SecurityManager is deprecated and marked for removal.
+        // group = (s != null) ? s.getThreadGroup() : Thread.currentThread().getThreadGroup(); // SecurityManager.getThreadGroup() by default, it returns the thread group of the current thread.
+		group = Thread.currentThread().getThreadGroup();
+		namePrefix = poolName + "-thread-";
     }
 
     @Override
