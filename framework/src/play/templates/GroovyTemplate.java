@@ -501,7 +501,9 @@ public class GroovyTemplate extends BaseTemplate {
 						+ "have you forgotten quotes around the message-key?");
 			}
 			*/
-            if (val.length == 1) {
+			if(val == null){
+				return "";
+			} else if (val.length == 1) {
                 return Messages.get(val[0]);
             } else {
                 // extract args from val
