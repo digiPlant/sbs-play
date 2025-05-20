@@ -1,4 +1,4 @@
-# SBS Play
+# SBS Play.
 
 # Usage
 
