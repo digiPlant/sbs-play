@@ -1,4 +1,4 @@
-# Welcome to Play framework
+# Welcome to Play framework!
 
 [![GitHub Discussions](https://img.shields.io/github/discussions/playframework/play1?&logo=github&color=brightgreen)](https://github.com/playframework/play1/discussions)
 [![Gitter](https://img.shields.io/gitter/room/playframework/play1)](https://gitter.im/playframework/play1)
